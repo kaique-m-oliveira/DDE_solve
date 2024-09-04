@@ -64,3 +64,5 @@ print("len(tt)", len(tt), "tt", tt)
 print("len(yy)", len(yy), "yy", yy)
 plot.plot(tt, yy)
 plot.show()
+
+# TODO: still gotta test one by one
