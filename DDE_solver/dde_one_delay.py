@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sc
 from scipy.integrate import solve_ivp
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import CubicHermiteSpline, CubicSpline
 from scipy.optimize import fsolve
 
 
@@ -58,52 +58,20 @@ def get_yq(discs, x, sol):
 
     for i in range(len(discs)):
         if x <= discs[i]:
-            # print("-" * 20)
-            # print(f"x = {x}, i = {i}")
-            # print(f"discs {discs}")
-            # print(f"sol {sol}")
             return sol[i](x)
     print(f"{x} is not in the interval t")
 
 
-# WARN:  THIS IS NOT GONNA WORK WITH SOLVE_IVP UNLESS I FIGURE OUT HOW TO USE THE PHI INSIDE F
-def DDE_solve(fun, t_span, phi, t_eval):
-    delays = find_delay(fun)
-    discs = get_primary_discontinuities(t_span, delays)[0]
-    sol = [phi]
-    N = len(discs)
-    for i in range(N):
-        sol = solve_ivp(fun, t_span, sol[i](discs[i]), method="RK45", t_eval=t_eval)
-    return sol
-
-
-def get_disc_euler(t_span, delay):
-    t0, tf = t_span
-    h = 10
-    t = t0
-    f = lambda x: delay(x) - t
-    discs = [t0]
-    while t < tf and h > 10**-5:
-        disc = fsolve(f, t + 0.01)[0]
-        if disc < t:
-            print("disc < t, deu ruim")
-            return
-        discs.append(disc)
-        h = disc - t
-        t = disc
-    return discs
-
-
 def f(t, y, yq):
-    return yq
+    return -yq
 
 
 def delay(t):
-    return t - 1
+    return t - np.pi / 2
 
 
 def phi(t):
-    return 1
+    return np.sin(t)
 
 
 def rk4_arit(f, t0, t1, y0):
@@ -120,11 +88,12 @@ def rk4_arit_delay(f, t0, t1, y0, yq):
     # print("rk4_arit_delay: ", "yq", yq, "f(t0, y0, yq)", f(t0, y0, yq))
 
     h = t1 - t0
-    k1 = h * f(t0, y0, yq)
-    k2 = h * f(t0 + h / 2, y0 + h * k1 / 2, yq + h * k1 / 2)
-    k3 = h * f(t0 + h / 2, y0 + h * k2 / 2, yq + h * k2 / 2)
-    k4 = h * f(t0 + h, y0 + h * k3, yq + h * k3)
+    k1 = f(t0, y0, yq)
+    k2 = f(t0 + h / 2, y0 + (h * k1) / 2, yq + (h * k1) / 2)
+    k3 = f(t0 + h / 2, y0 + (h * k2) / 2, yq + (h * k2) / 2)
+    k4 = f(t0 + h, y0 + (h * k3), yq + (h * k3))
     y1 = y0 + h * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+    # print(f"y = {y1} , t0 {t0}, t1 {t1}, y0 {y0} , yq {yq}")
     return y1
 
 
@@ -141,28 +110,33 @@ def rk4(f, t_span, y0, t):
     return y
 
 
-def find_yq(t, t0, yq):
-    return
-
-
 def rk4_cont(f, t_span, phi, delay, h):
     """who tf knows"""
     discs = get_primary_discontinuities(t_span, [delay])[0]
     sol = [phi]
 
-    y = [phi(t_span[0])]
-    t = [t_span[0]]
+    t0 = t_span[0]
+    y = [phi(t0)]
+    t = [t0]
+    dy = [(phi(t0) - phi(t0 - h)) / h]
+    # print(f"y = {len(y)} dy = {len(dy)}")
     for disc in discs:
         y = [y[-1]]
         t = [t[-1]]
+        dy = [dy[-1]]
         while delay(t[-1]) < disc:  # adding to the discrete solution
-            yq = get_yq(discs, delay(t[-1]), sol)
+            x = delay(t[-1])
+            # print(f"x is {x} and t is {t[-1]}")
+            yq = get_yq(discs, x, sol)
             y.append(rk4_arit_delay(f, t[-1], t[-1] + h, y[-1], yq))
+            dy.append((sol[-1](t0) - sol[-1](t0 - h)) / h)
             t.append(t[-1] + h)
-        sol.append(CubicSpline(t, y))
-        yyy = [sol[-1](i) for i in t]
-        plt.plot(t, yyy)
-        plt.show()
+            # print(f" dy at t = {t[-1]} is {(sol[-1](t0 + h) - sol[-1](t0)) / h}")
+            # print(f" len(y) {len(y)} len(dy) {len(dy)}")
+        # print(f"y = {len(y)} dy = {len(dy)}")
+        # sol.append(CubicSpline(t, y))
+        sol.append(CubicHermiteSpline(t, y, dy))
+        # print(f"começo e final de t, {t[0]} e {t[-1]}")
 
     def solution(var):
         for i in range(len(discs)):
@@ -172,27 +146,55 @@ def rk4_cont(f, t_span, phi, delay, h):
     return solution
 
 
-t_span = [0, 5]
+t_span = [0, 10]
 y0 = 2
 # t = np.arange(0, 100, 0.1)
 h = 0.01
 sol = rk4_cont(f, t_span, phi, delay, h)
-t = np.arange(-1, 5, 0.1)
+t = np.arange(-1, 10, 0.1)
 
 y = [sol(i) for i in t]
+sin = np.sin(t)
+error = 10
+for i in range(len(t)):
+    diff = abs(sin[i] - y[i])
+    # print(diff)
+    if diff <= error:
+        error = diff
+
+# print("len of t", len(t))
+# print("this is the max error", error)
 plt.plot(t, y)
+plt.plot(t, sin)
 plt.show()
 
 
-# def test(t):
-#     def testing(t):
-#         return 2 * t
-#
-#     return testing
-#
-#
-# bla = test(2)
-# print("bla", bla(8))
+# # WARN:  THIS IS NOT GONNA WORK WITH SOLVE_IVP UNLESS I FIGURE OUT HOW TO USE THE PHI INSIDE F
+# def DDE_solve(fun, t_span, phi, t_eval):
+#     delays = find_delay(fun)
+#     discs = get_primary_discontinuities(t_span, delays)[0]
+#     sol = [phi]
+#     N = len(discs)
+#     for i in range(N):
+#         sol = solve_ivp(fun, t_span, sol[i](discs[i]), method="RK45", t_eval=t_eval)
+#     return sol
+
+
+# def get_disc_euler(t_span, delay):
+#     t0, tf = t_span
+#     h = 10
+#     t = t0
+#     f = lambda x: delay(x) - t
+#     discs = [t0]
+#     while t < tf and h > 10**-5:
+#         disc = fsolve(f, t + 0.01)[0]
+#         if disc < t:
+#             print("disc < t, deu ruim")
+#             return
+#         discs.append(disc)
+#         h = disc - t
+#         t = disc
+#     return discs
 
 
 def g(t, y):
