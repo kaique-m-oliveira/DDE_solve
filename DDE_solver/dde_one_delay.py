@@ -1,5 +1,6 @@
 import ast
 import inspect
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -118,7 +119,7 @@ def rk4_cont(f, t_span, phi, delay, h):
     t0 = t_span[0]
     y = [phi(t0)]
     t = [t0]
-    dy = [(phi(t0) - phi(t0 - h)) / h]
+    dy = [0]
     # print(f"y = {len(y)} dy = {len(dy)}")
     for disc in discs:
         y = [y[-1]]
@@ -129,7 +130,9 @@ def rk4_cont(f, t_span, phi, delay, h):
             # print(f"x is {x} and t is {t[-1]}")
             yq = get_yq(discs, x, sol)
             y.append(rk4_arit_delay(f, t[-1], t[-1] + h, y[-1], yq))
-            dy.append((sol[-1](t0) - sol[-1](t0 - h)) / h)
+            dev = (y[-1] - y[-2]) / h
+            print(f"t = {t[-1]} and dy = {dev}")
+            dy.append(dev)
             t.append(t[-1] + h)
             # print(f" dy at t = {t[-1]} is {(sol[-1](t0 + h) - sol[-1](t0)) / h}")
             # print(f" len(y) {len(y)} len(dy) {len(dy)}")
@@ -153,17 +156,20 @@ h = 0.01
 sol = rk4_cont(f, t_span, phi, delay, h)
 t = np.arange(-1, 10, 0.1)
 
+
 y = [sol(i) for i in t]
 sin = np.sin(t)
-error = 10
-for i in range(len(t)):
-    diff = abs(sin[i] - y[i])
+# WARN: this error analysis suggests the method is linear
+error = 0
+for i in range(100):
+    x = random.uniform(0, 10)
+    diff = abs(np.sin(x) - sol(x))
     # print(diff)
-    if diff <= error:
+    if diff > error:
         error = diff
 
 # print("len of t", len(t))
-# print("this is the max error", error)
+print("this is the max error", error)
 plt.plot(t, y)
 plt.plot(t, sin)
 plt.show()
