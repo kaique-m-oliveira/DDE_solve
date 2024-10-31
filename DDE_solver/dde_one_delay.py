@@ -10,6 +10,20 @@ from scipy.interpolate import CubicHermiteSpline, CubicSpline
 from scipy.optimize import fsolve
 
 
+def SIR(t, SI, SIq):
+    A = 0.1, 0.1
+    a1, a2 = 0.1, 0.1
+    u, b = 0.1, 0.1
+    a, y = 0.1, 0.1
+    tau = 1
+
+    S, I = SI
+    Sq, Iq = SIq
+    DI = A - u * S - (b * S * I) / (1 + a1 * S + a2 * I)
+    DS = b * np.exp(-u * tau) * Sq * Iq / (1 + a1 * Sq + a2 * Iq) - (u + a + y) * I
+    return [DI, DS]
+
+
 def find_delay(f):
     """returns a list with the delays"""
     source_code = inspect.getsource(f)
