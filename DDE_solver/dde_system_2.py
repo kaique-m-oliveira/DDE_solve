@@ -9,23 +9,39 @@ from scipy.optimize import fsolve
 
 
 def SIR(t, SI, SIq):
-    A = 0.1
-    a1, a2 = 0.1, 0.1
-    u, b = 0.1, 0.1
-    a, y = 0.1, 0.1
+    A = 0.94
+    a1, a2 = 0.5, 0.5
+    u, b = 0.05, 0.1
+    a, y = 0.5, 0.5
     tau = 1
 
     S, I = SI
     Sq, Iq = SIq
     DI = A - u * S - (b * S * I) / (1 + a1 * S + a2 * I)
-    DS = b * np.exp(-u * tau) * Sq * Iq / (1 + a1 * Sq + a2 * Iq) - (u + a + y) * I
-    print("DI", DI)
-    print("DS", DS)
+    DS = (b * np.exp(-u * tau) * Sq * Iq) / (1 + a1 * Sq + a2 * Iq) - (u + a + y) * I
     return np.array([DI, DS])
 
 
+def ex142_paul(t, xyz, xyzq):
+    x, y, z = xyz
+    xq, yq, zq = xyzq
+    Dx = -x * yq + y
+    Dy = x * yq - yq
+    Dz = y - yq
+    return np.array([Dx, Dy, Dz])
+
+
+def exMATLAB(t, xyz, xyzq):
+    x, y, z = xyz
+    xq, yq, zq = xyzq
+    Dx = xq
+    Dy = xq + yq
+    Dz = y
+    return np.array([Dx, Dy, Dz])
+
+
 def phi(t):
-    return np.array([1, 1])
+    return np.array([1, 1, 1])
 
 
 def get_primary_discontinuities(t_span, delays):
@@ -67,8 +83,8 @@ def get_yq(discs, x, sol):
     print(f"{x} is not in the interval t")
 
 
-def f(t, y, yq):
-    return -yq
+# def f(t, y, yq):
+#     return -yq
 
 
 def delay(t):
@@ -79,7 +95,6 @@ def rk4_arit_delay(f, t0, t1, y0, yq):
     # print("rk4_arit_delay: ", "yq", yq, "f(t0, y0, yq)", f(t0, y0, yq))
     h = t1 - t0
     k1 = h * f(t0, y0, yq)
-    print("fucking k1", k1)
     k2 = h * f(t0 + h / 2, y0 + k1 / 2, yq + k1 / 2)
     k3 = h * f(t0 + h / 2, y0 + k2 / 2, yq + k2 / 2)
     k4 = h * f(t0 + h, y0 + k3, yq + k3)
@@ -103,16 +118,13 @@ def rk4_cont_sys(f, t_span, phi, delay, h):
         y = [y[-1]]
         t = [t[-1]]
         # dy = [dy[-1]]
-        i = 0
+        # i = 0
         while delay(t[-1]) < disc:  # adding to the discrete solution
             x = delay(t[-1])
             # print(f"x is {x} and t is {t[-1]}")
             yq = get_yq(discs, x, sol)
-            print("last y", y[-1])
             rk4_stuff = rk4_arit_delay(f, t[-1], t[-1] + h, y[-1], yq)
             # print("yq", yq, "rk4_stuff", rk4_stuff, "y", y)
-            i += 1
-            # print(i)
             y = np.vstack((y, rk4_stuff))
             # dev = (y[-1] - y[-2]) / h
             # print(f"t = {t[-1]} and dy = {dev}")
@@ -122,13 +134,12 @@ def rk4_cont_sys(f, t_span, phi, delay, h):
             # print(f" len(y) {len(y)} len(dy) {len(dy)}")
         # print(f"y = {len(y)} dy = {len(dy)}")
         # sol.append(CubicSpline(t, y))
-        # FIX: doenst work
         s = []
         for i in range(len(y[-1])):
             # NOTE: works
             s.append(CubicSpline(t, y[:, i]))
-            print("last y", y[:, i][-1])
-        print("bla", s[0](1.5), s[1](1.5))
+        #     print("last y", y[:, i][-1])
+        # print("bla", s[0](1.5), s[1](1.5))
         sol.append(lambda t: np.array([s[i](t) for i in range(len(s))]))
 
         # print("sol", sol)
@@ -136,11 +147,11 @@ def rk4_cont_sys(f, t_span, phi, delay, h):
         # print(f"começo e final de t, {t[0]} e {t[-1]}")
 
     # WARN: here
-
-    print("-" * 99)
-    print("to the solution")
-    print("-" * 99)
-    print("what is sol", len(sol))
+    #
+    # print("-" * 99)
+    # print("to the solution")
+    # print("-" * 99)
+    # print("what is sol", len(sol))
 
     def solution(var):
 
@@ -148,7 +159,6 @@ def rk4_cont_sys(f, t_span, phi, delay, h):
             if var <= discs[i]:
                 return sol[i](var)
 
-    print("solution(1)", solution(1.5))
     return solution
 
 
@@ -172,7 +182,7 @@ def rk4_cont(f, t_span, phi, delay, h):
             yq = get_yq(discs, x, sol)
             y.append(rk4_arit_delay(f, t[-1], t[-1] + h, y[-1], yq))
             dev = (y[-1] - y[-2]) / h
-            print(f"t = {t[-1]} and dy = {dev}")
+            # print(f"t = {t[-1]} and dy = {dev}")
             dy.append(dev)
             t.append(t[-1] + h)
             # print(f" dy at t = {t[-1]} is {(sol[-1](t0 + h) - sol[-1](t0)) / h}")
@@ -190,20 +200,18 @@ def rk4_cont(f, t_span, phi, delay, h):
     return solution
 
 
-t_span = [0, 100]
-y0 = 2
-t = np.arange(0, 100, 0.1)
+t0, tf = 0, 10
+t_span = [t0, tf]
 h = 0.01
-fuck = rk4_cont_sys(SIR, t_span, phi, delay, h)
-for i in range(9):
-    print("fuck de", fuck(i + 0.5))
-#
-S, I = np.zeros(len(t)), np.zeros(len(t))
+t = np.arange(t0, tf, h)
+fuck = rk4_cont_sys(exMATLAB, t_span, phi, delay, h)
+
+S, I, R = np.zeros(len(t)), np.zeros(len(t)), np.zeros(len(t))
 for i in range(len(t)):
-    print("t[i]", t[i])
-    S[i], I[i] = fuck(t[i])
+    S[i], I[i], R[i] = fuck(t[i])
 
 plt.plot(t, S, label="S", color="red")
 plt.plot(t, I, label="I", color="blue")
+plt.plot(t, R, label="R", color="green")
 plt.show()
 # print("I dont think this is gonnna work at all", sol)
