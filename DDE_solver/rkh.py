@@ -1,39 +1,65 @@
+from dataclasses import dataclass
+
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sc
 from scipy.optimize import root
 
 
-def one_step_RK4(f, tn, yn, h, alpha, eta):
-    K1 = f(tn, yn, eta(alpha(tn)))
-    K2 = f(tn + 0.5 * h, yn + 0.5 * h * K1, eta(alpha(tn + 0.5 * h)))
-    K3 = f(tn + 0.5 * h, yn + 0.5 * h * K2, eta(alpha(tn + 0.5 * h)))
-    K4 = f(tn + h, yn + h * K3, eta(alpha(tn + h)))
+class OneStep:
 
-    yn_plus = yn + h*(K1 / 6 + K2 / 3 + K3 / 3 + K4 / 6)
-    return K1, K2, K3, K4, yn_plus
+    def __init__(self, solver, tn, h, yn):
+        self.solver = solver
+        self.t = [tn, tn + h]
+        self.h = h
+        self.h_next = None
+        self.y = [yn, 0]  # we don't have yn_plus yet
+        self.y_tilde = None
+        self.K = np.zeros(8)
+        self.eta = np.zeros(2)
+        self.disc_local_error = None
+        self.uni_local_error = None
+        self.params = CRKParameters()
 
+    def one_step_RK4(self):
+        tn, h, yn = self.t[0], self.h, self.y[0]
+        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        self.K[0] = f(tn, yn, eta(alpha(tn)))
+        self.K[1] = f(tn + 0.5 * h, yn + 0.5 * h * self.K[0], eta(alpha(tn + 0.5 * h)))
+        self.K[2] = f(tn + 0.5 * h, yn + 0.5 * h * self.K[1], eta(alpha(tn + 0.5 * h)))
+        self.K[3] = f(tn + h, yn + h * self.K[2], eta(alpha(tn + h)))
+        self.y[1] = yn + h * (
+            self.K[0] / 6 + self.K[1] / 3 + self.K[2] / 3 + self.K[3] / 6
+        )
+        # return self.K[0], self.K[1], self.K[2], self.K[3], yn_plus
 
-def one_step_interpolants(f, tn, yn, yn_plus, h, alpha, eta, K1, K2, K3, K4, theta1):
-    K5 = f(tn + h, yn_plus, eta(tn + h - alpha(tn + h)))
-
-    def eta_0(theta):
+    def _eta_0(self, theta):
+        tn, h, yn = self.t[0], self.t[1] - self.t[0], self.y[0]
+        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        yn_plus = self.y[1]
         t2, t3 = theta * theta, theta * theta * theta
 
         d1 = 2 * t3 - 3 * t2 + 1
         d2 = -2 * t3 + 3 * t2
         d3 = t3 - 2 * t2 + theta
         d4 = t3 - t2
-        return d1 * yn + d2 * yn_plus + d3 * h * K1 + d4 * h * K5
+        # print(
+        #     f" tn {tn} \n h {h} \n alpha(tn + h) {alpha(tn + h)} "
+        # )
+        self.K[4] = f(tn + h, yn_plus, eta(alpha(tn + h)))
+        return d1 * yn + d2 * yn_plus + d3 * h * self.K[0] + d4 * h * self.K[4]
 
-    tt = tn + theta1 * h
-    K6 = f(tt, eta_0(tt), eta(alpha(tt)))
-
-    def eta_1(theta):
+    def _eta_1(self, theta):
+        theta1 = self.params.theta1
         t2, t3 = theta * theta, theta * theta * theta
         nom1, den1 = (theta - 1) ** 2, 2 * theta1 - 1
+        yn, yn_plus = self.y[0], self.y[1]
+        h = self.h
+        tn, yn = self.t[0], self.y[0]
+        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
 
         d1 = nom1 * (-3 * t2 + 2 * den1 * theta + den1) / den1
-        d2 = t2 * (3 * t2 - 4(theta1 + 1) * theta + 6 * theta1) / den1
+        d2 = t2 * (3 * t2 - 4 * (theta1 + 1) * theta + 6 * theta1) / den1
         d3 = (
             theta
             * nom1
@@ -47,106 +73,214 @@ def one_step_interpolants(f, tn, yn, yn_plus, h, alpha, eta, K1, K2, K3, K4, the
             / (2 * (theta1 - 1) * den1)
         )
         d5 = t2 * nom1 / (2 * theta1 * den1 * (theta1 - 1))
-        return d1 * yn + d2 * yn_plus + d3 * h * K1 * d4 * h * K5 + d5 * h * K6
+        tt = tn + theta1 * h
+        self.K[5] = f(tt, self.eta[0](tt), eta(alpha(tt)))
+        return (
+            d1 * yn
+            + d2 * yn_plus
+            + d3 * h * self.K[0] * d4 * h * self.K[4]
+            + d5 * h * self.K[5]
+        )
 
-    return eta_0, eta_1, K5, K6
+    def error_est_method(self):
+        # Lobatto formula now for pi1 and pi2
+        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
 
+        pi1, pi2 = (5 - np.sqrt(5)) / 10, (5 + np.sqrt(5)) / 10
+        t_pi1, t_pi2 = self.t[0] + pi1 * self.h, self.t[0] + pi2 * self.h
 
-def error_est_method(tn, h, yn, f, yn_plus, eta, eta_1, alpha, K1, K5):
-    # Lobatto formula now for pi1 and pi2
+        self.K[6] = f(t_pi1, self._eta_1(t_pi1), eta(alpha(t_pi1)))
+        self.K[7] = f(t_pi2, self._eta_1(t_pi2), eta(alpha(t_pi2)))
 
-    pi1, pi2 = (5 - np.sqrt(5)) / 10, (5 + np.sqrt(5)) / 10
-    t_pi1, t_pi2 = tn + pi1 * h, tn + pi2 * h
+        self.y_tilde = self.y[0] + self.h * (
+            self.K[0] / 12 + 5 * self.K[6] / 12 + 5 * self.K[7] / 12 + self.K[4] / 12
+        )
 
-    K7 = f(t_pi1, eta_1(t_pi1), eta(alpha(t_pi1)))
-    K8 = f(t_pi2, eta_1(t_pi2), eta(alpha(t_pi2)))
+    def disc_local_error_satistied(self):
 
-    yn_plus_tilde = yn + h * (K1 / 12 + 5 * K7 / 12 + 5 * K8 / 12 + K5 / 12)
-    return yn_plus_tilde, K7, K8
+        self.disc_local_error = (
+            np.linalg.norm(self.y_tilde - self.y[1]) / self.h
+        )  # eq 7.3.4
 
-
-def discrete_local_error_satistied(yn_plus_tilde, yn_plus, h, omega_min, rho, TOL):
-    discrete_local_error = np.linalg.norm(yn_plus_tilde - yn_plus) / h  # eq 7.3.4
-
-    if discrete_local_error <= TOL:
-        return True, h
-    else:
-        h = (
-            max(
-                omega_min, min(omega_max, rho * (TOL / discrete_local_error) ** (1 / 4))
+        if self.disc_local_error <= self.params.TOL:
+            return True
+        else:
+            self.h = (
+                max(
+                    self.params.omega_min,
+                    min(
+                        self.params.omega_max,
+                        self.params.rho
+                        * (self.params.TOL / self.disc_local_error) ** (1 / 4),
+                    ),
+                )
+                * self.h
             )
-            * h
+            return False, self.disc_local_error
+
+    def uni_local_error_satisfied(self):
+
+        max_uni_difference = (
+            self.h
+            * (32 * abs(2 * self.params.theta1 - 1))
+            * np.linalg.norm(
+                ((2 * self.params.theta1 - 1) / self.params.theta1) * self.K[0]
+                - (2 * self.K[1] + 2 * self.K[2] + self.K[3])
+                + (3 * self.params.theta1 - 2) * self.K[4] / (self.params.theta1 - 1)
+                + self.K[5] / (self.params.theta1 * (self.params.theta1 - 1))
+            )
         )
-        return False, h
 
-def uniform_local_error_satisfied(h, K1, K2, K3, K4, K5, K6, TOL, theta1, omega_min, rho):
+        self.uni_local_error = self.h * max_uni_difference
 
-    max_uniform_difference = (
-        h
-        * (32 * abs(2 * theta1 - 1))
-        * np.linalg.norm(
-            ((2 * theta1 - 1) / theta1) * K1
-            - (2 * K2 + 2 * K3 + K4)
-            + (3 * theta1 - 2) * K5 / (theta1 - 1)
-            + K6 / (theta1 * (theta1 - 1))
+        if self.uni_local_error <= self.params.TOL:
+            return True
+        else:
+            self.h = (
+                max(
+                    self.params.omega_min,
+                    self.params.rho
+                    * (self.params.TOL / self.uni_local_error) ** (1 / 5),
+                )
+                * self.h
+            )
+            return False, self.uni_local_error
+
+    def try_step_CRK(self):
+
+        self.one_step_RK4()
+        self.eta = [self._eta_0, self._eta_1]
+        self.error_est_method()
+
+        _disc_local_error_satistied = self.disc_local_error_satistied()
+
+        if not _disc_local_error_satistied:
+            return False
+
+        _uni_local_error_satisfied = self.uni_local_error_satisfied()
+
+        if not _uni_local_error_satisfied:
+            return False
+
+        self.h_next = (
+            max(
+                self.params.omega_min,
+                min(
+                    self.params.omega_max,
+                    self.params.rho
+                    * (self.params.TOL / self.disc_local_error) ** (1 / 4),
+                    self.params.rho
+                    * (self.params.TOL / self.uni_local_error) ** (1 / 5),
+                ),
+            )
+            * self.h
         )
-    )
 
-    uniform_local_error = h * max_uniform_difference
+        return True
 
-    if uniform_local_error <= TOL:
-        return True, h
-    else:
-        h = max(omega_min, rho * (TOL / uniform_local_error) ** (1 / 5)) * h
-        return False, h
+    def one_step_CRK(self, max_iter=30):
+        step_satisfied = self.try_step_CRK()
 
-def try_step_CRK( f, tn, yn, h, alpha, eta, TOL=1e-08, theta1=1 / 3, omega_min=0.5, omega_max=1.5, rho=0.1):
+        # TODO: ADICIONAR A BUSCA POR DESCONTINUIDADE AQUI
+        if step_satisfied:
+            return self
 
-    K1, K2, K3, K4, yn_plus = one_step_RK4(f, tn, yn, h, alpha, eta)
+        for i in range(max_iter):
+            step_satisfied = self.try_step_CRK()
+            if step_satisfied:
+                return self
 
-    eta_0, eta_1, K5, K6 = one_step_interpolants( f, tn, yn, h, alpha, eta, K1, K2, K3, K4)
-
-    yn_plus_tilde, K7, K8 = error_est_method( tn, h, yn, f, yn_plus, eta, eta_1, alpha, K1, K5)
-
-    _discrete_local_error_satistied, h = discrete_local_error_satistied(yn_plus_tilde, yn_plus, h, omega_min, rho, TOL):
-
-    if not _discrete_local_error_satistied:
-        return tn, None, None, h
-
-    _uniform_local_error_satisfied, h = uniform_local_error_satisfied(h, K1, K2, K3, K4, K5, K6, TOL, theta1, omega_min, rho)
-
-   if not _uniform_local_error_satisfied:
-        return tn, None, None, h
+        raise RuntimeError(
+            f"Max iterations reached for step at tn = {self.t} and h = {self.h}"
+        )
 
 
-    h_next = max( omega_min, min( omega_max, rho * (TOL / discrete_local_error) ** (1 / 4), rho * (TOL / uniform_local_error) ** (1 / 5))) * h
-
-    return tn + h, yn_plus, eta_1, h_next
-
-
-
-
-#TODO: gotta do the max iterations here and add the disc search as well, before doig DDE_solve
-def one_step_CRK(f, tn, yn, h, alpha, eta, TOL=1e-08, theta1=1 / 3, max_rejected_steps=30, omega_min=0.5, omega_max=1.5, rho=0.1):
-    tn_plus, yn_plus, eta_1, h_next = try_step_CRK( f, tn, yn, h, alpha, eta, TOL=TOL, theta1=theta1, omega_min=omega_min, omega_max=omega_max, rho=rho)
-
-    if yn_plus == None:
-        possible_disc = get_disc()
-
-#TODO: at lot of work left
-def DDE_solve(f, t_span, phi, alpha, TOL=10**-8, C=0.1):
-    t0, tf = t_span
-    t = t0
-    h = (TOL ** (1 / 4)) / C
-    while t <= tf:
-        t_next = t + h
-
-        t, y, h, eta_1 = try_step_CRK(f, tn, yn, h, alpha, eta, TOL=TOL)
-        if y == None:
-        
+@dataclass
+class CRKParameters:
+    theta1: float = 1 / 3
+    TOL: float = 1e-8
+    rho: float = 0.9
+    omega_min: float = 0.5
+    omega_max: float = 1.5
 
 
+class Solver:
 
+    def __init__(self, f, alpha, phi, t_span):
+        self.t_span = np.array(t_span)
+        self.f = f
+        self.alpha = alpha
+        self.phi = phi
+        self.t = [t_span[0]]
+        self.steps = []
+        self.y = [phi(t_span[0])]
+        self.etas = [phi]
+        self.params = CRKParameters()
+
+    @property
+    def eta(self):
+        def eval(t):
+            for i in range(len(self.t)):
+                if t <= self.t[i]:
+                    # print("in, t < ti", t, self.t[i])
+                    return self.etas[i](t)
+                # print("out, t < ti", t, self.t[i])
+
+        # print("eval", eval)
+        return eval
+
+    def solve_dde(self):
+        t, h, tf = self.t_span[0], (self.params.TOL ** (1 / 4)) * 0.1, self.t_span[-1]
+        print("-" * 80)
+        print("value h", h)
+        print("-" * 80)
+        onestep = OneStep(self, self.t[-1], h, self.y[-1])
+        step = onestep.one_step_CRK()
+        self.steps.append(step)
+        while t < tf:
+            onestep = OneStep(self, self.t[-1], h, self.y[-1])
+            step = onestep.one_step_CRK()
+            t += step.h_next
+            print(t)
+            if t < self.t_span[-1]:
+                self.t.append(t)
+                self.steps.append(step)
+                self.y.append(step.y[1])
+                self.etas.append(step.eta[1])
+
+        h = tf - self.t[-1]
+        onestep = OneStep(self, tf, h, self.y[-1])
+        step = onestep.one_step_CRK()
+        self.t.append(tf)
+        self.steps.append(step)
+        self.y.append(step.y[1])
+        self.etas.append(step.eta[1])
+
+
+def f(t, y, yq):
+    return -yq
+
+
+def phi(t):
+    return np.sin(t)
+
+
+def alpha(t):
+    return t - np.pi / 2
+
+
+t_span = [0, 3]
+
+solver = Solver(f, alpha, phi, t_span)
+solver.solve_dde()
+
+x = np.linspace(0, 3, 100)
+sin = np.sin(x)
+sol = [solver.eta(i) for i in x]
+
+plt.plot(x, sin, color="red")
+plt.plot(x, sol, color="blue")
+plt.show()
 
 
 # class OneStepData:
