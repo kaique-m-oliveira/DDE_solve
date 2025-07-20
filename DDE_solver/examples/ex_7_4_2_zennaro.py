@@ -8,23 +8,22 @@ from DDE_solver.rkh_overlapping import *
 
 
 def f(t, y, yq):
-    A = 1 - np.exp(-3*np.pi/2)
-    return A * y + yq - A * np.sin(t)
+    return -y + yq*(2.5 - 1.5 * (yq/1000)**(2.5))
 
 
 def phi(t):
-    return np.exp(t) + np.sin(t)
+    return 999
 
 
 def alpha(t, y):
-    return t - 3*np.pi/2
+    return t - 2
 
 
 def real_sol(t):
-    return np.exp(t) + np.sin(t)
+    return np.sin(t/20)
 
 
-t_span = [1, 1.0001]
+t_span = [0, 10]
 
 solver = Solver(f, alpha, phi, t_span)
 solver.solve_dde()
