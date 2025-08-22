@@ -3,7 +3,8 @@
 # from DDE_solver.rkh_testing import *
 # from DDE_solver.rkh import *
 import numpy as np
-from DDE_solver.rkh_ovl_simp_newton import *
+# from DDE_solver.rkh_ovl_simp_newton import *
+from DDE_solver.solve_dde import *
 
 # WARN: STATE EXAMPLE
 
