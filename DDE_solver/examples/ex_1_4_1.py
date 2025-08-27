@@ -12,8 +12,9 @@ from DDE_solver.rkh_ovl_simp_newton import *
 
 def f(t, y, yq):
     y1, y2 = y
-    x1 = yq + y2
-    x2 = y1 - yq
+    yq1, yq2 = yq
+    x1 = yq1 + y2
+    x2 = y1 - yq1
     return np.array([x1, x2])
 
 
@@ -43,11 +44,11 @@ realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-print("max", max(abs(sol - realsol)))
+print("max", np.max(np.abs(sol - realsol)))
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', max(solver.y - solution))
 
 
-plt.plot(tt, realsol, color="red")
-plt.plot(tt, sol, color="blue")
+plt.plot(tt, realsol, color="red", label="realsol")
+plt.plot(tt, sol, color="blue", label="aproxx")
+plt.legend()
 plt.show()

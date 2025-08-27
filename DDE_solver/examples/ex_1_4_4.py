@@ -11,26 +11,28 @@ from DDE_solver.rkh_ovl_simp_newton import *
 
 
 def f(t, y, yq):
-    A = 1 - np.exp(-3*np.pi/2)
-    return A * y + yq - A * np.sin(t)
+    y1, y2, y3, y4, y5 = y
+    yq1, yq2, yq3, yq4, yq5 = yq
+    x1 = yq5 + yq3
+    return np.array([x1, x2])
 
 
 def phi(t):
-    return np.exp(t) + np.sin(t)
+    return np.array([np.exp(t), 1 - 1/np.e])
 
 
 def alpha(t, y):
-    return t - 3*np.pi/2
+    return t - 1
 
 
 def real_sol(t):
-    return np.exp(t) + np.sin(t)
+    return np.array([np.exp(t), np.exp(t) - np.exp(t - 1)])
 
 
-def phi_t(t): return np.exp(t) + np.cos(t)
+def phi_t(t): return [0, 0]
 
 
-t_span = [1, 2]
+t_span = [0, 3]
 
 
 solver = Solver(f, alpha, phi, t_span)
@@ -41,12 +43,11 @@ realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-print("max", max(abs(sol - realsol)))
+print("max", np.max(np.abs(sol - realsol)))
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', max(solver.y - solution))
 
 
-plt.plot(tt, realsol, color="red")
-plt.plot(tt, sol, color="blue")
+plt.plot(tt, realsol, color="red", label="realsol")
+plt.plot(tt, sol, color="blue", label="aproxx")
 plt.legend()
 plt.show()
