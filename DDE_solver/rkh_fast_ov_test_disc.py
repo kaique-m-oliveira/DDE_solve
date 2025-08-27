@@ -144,6 +144,7 @@ class OneStep:
         lu, piv = lu_factor(J)
 
         def F(K):
+            calls1 = self.solver.eta_calls
             F = np.zeros(4)
             for i in range(4):
                 ti = tn + c[i] * h
@@ -155,6 +156,8 @@ class OneStep:
                     eeta = self._hat_eta_0
                 Y_tilde = eeta(alpha(ti, yi))
                 F[i] = K[i] - f(ti, yi, Y_tilde)
+            calls2 = self.solver.eta_calls
+            print('eta calls from F', calls2 - calls1)
             return F
 
         K = [i if i != 0 else self.K[0] for i in self.K[0:4]]
@@ -425,11 +428,13 @@ class Solver:
         self.etas_t = []
         self.params = CRKParameters()
         self.discs = [t_span[0]]
+        self.eta_calls = 0
 
     @ property
     def eta(self):
 
         def eval(t):
+            self.eta_calls += 1
             idx = bisect_right(self.t, t)
             # Ensure t in [t_k-1, t_k] → use eta_k
             if idx == 0:

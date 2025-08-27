@@ -12,7 +12,7 @@ from scipy.integrate import solve_ivp
 @dataclass
 class CRKParameters:
     theta1: float = 1 / 3
-    TOL: float = 1e-5
+    TOL: float = 1e-3
     rho: float = 0.9
     omega_min: float = 0.5
     omega_max: float = 1.5
@@ -139,7 +139,8 @@ class OneStep:
 
     def get_disc(self, disc):
         rho, TOL = self.params.rho, self.params.TOL
-        alpha, alpha_t, alpha_y = self.solver.alpha, self.solver.alpha_t, self.solver.alpha_y,
+        alpha = self.solver.alpha
+        alpha_t, alpha_y = self.solver.d_alpha
         eta, eta_t = self.solver.etas[-1], self.solver.etas_t[-1]
         iter, max_iter = 0, 30
         t = self.t[0] + self.h/2
@@ -148,31 +149,25 @@ class OneStep:
             return alpha(t, eta(t)) - disc
 
         def d_zeta_t(t, disc):
-            a = alpha_t(t, eta(t))
-            b = alpha_y(t, eta(t))
-            c = eta_t(t)
-            print('a', a, 'b', b, 'c', c)
-            return a + b * c
-            # return alpha_t(t, eta(t)) + alpha_y(t, eta(t)) * eta_t(t)
-
+            return alpha_t(t, eta(t)) + alpha_y(t, eta(t)) * eta_t(t)
         while d_zeta(t, disc) < rho*TOL and iter <= max_iter:
             t += -d_zeta(t, disc)/d_zeta_t(t, disc)
             iter += 1
-        return t
+        return float(t)
 
     def one_step_RK4(self):
         tn, h, yn = self.t[0], self.h, self.y[0]
         f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
         c = self.params.c
 
-        self.K[0] = f(tn, yn, eta(alpha(tn, yn)))
-        for i in range(1, 4):
+        for i in range(4):
             if alpha(tn + c[i] * h, yn + c[i] * h) <= tn:
                 Y_tilde = eta(
                     alpha(tn + c[i] * h, yn + c[i] * h * self.K[i - 1]))
             else:  # this would be the overlapping case
                 self.overlap = True
                 success = self._simplified_Newton()
+                print('successfull newton')
                 if not success:
                     return False
                 break
@@ -183,7 +178,7 @@ class OneStep:
         return True
 
     def _simplified_Newton(self):
-        print('Newton')
+        print('Newton', self.t)
         A, b, c = self.params.A, self.params.b, self.params.c
         rho, TOL = self.params.rho, self.params.TOL
         f_t, f_y, f_x = self.solver.d_f
@@ -209,8 +204,6 @@ class OneStep:
                       [d3, d3, d3, d3], [d4, d4, d4, d4]])
 
         I = np.eye(4, dtype=yn.dtype)
-        # input(f'I = {I}')
-
         # FIX: gotta make this check automatic
         if alpha_n <= tn:
             d_eta = eta_t
@@ -224,21 +217,16 @@ class OneStep:
         def F(K):
             calls1 = self.solver.eta_calls
             F = np.zeros((4, self.n), dtype=yn.dtype)
-            # input(f'F = {F}')
             for i in range(4):
                 ti = tn + c[i] * h
                 yi = yn + c[i] * h * self.K[i-1]
                 # FIX: gotta make this check automatic
-                tii = alpha(ti, yi)
-                if tii <= tn:
-                    # eeta = eta
-                    Y_tilde = eta(tii)
-                    print('eta')
+                if alpha(ti, yi) <= tn:
+                    eeta = eta
                 else:
-                    print('hat_eta_0')
-                    Y_tilde = self._hat_eta_0(tii)
+                    eeta = self._hat_eta_0
+                Y_tilde = eeta(alpha(ti, yi))
                 F[i] = K[i] - f(ti, yi, Y_tilde)
-            # print('time F', time2 - time1)
             calls2 = self.solver.eta_calls
             print('eta calls from F', calls2 - calls1)
             return F
@@ -274,7 +262,7 @@ class OneStep:
             eeta = self._hat_eta_0
         self.K[4] = f(tn + h, yn_plus, eeta(alpha(tn + h, yn_plus)))
         eta0 = d1 * yn + d2 * yn_plus + d3 * h * self.K[0] + d4 * h * self.K[4]
-        return np.array(eta0)
+        return eta0
 
     def _hat_eta_0(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
@@ -289,7 +277,7 @@ class OneStep:
         d4 = ((2/3) * theta - 1/2) * t2
         eta0 = yn + h * (d1 * self.K[0] + d2 *
                          self.K[1] + d3 * self.K[2] + d4 * self.K[3])
-        return np.array(eta0)
+        return eta0
 
     def _hat_eta_0_t(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
@@ -303,7 +291,7 @@ class OneStep:
         d4 = theta * (-1 + 2 * theta)
         eta0 = h * (d1 * self.K[0] + d2 *
                     self.K[1] + d3 * self.K[2] + d4 * self.K[3])
-        return np.array(eta0)
+        return eta0
 
     def _eta_1(self, theta):
         theta1 = self.params.theta1
@@ -338,13 +326,13 @@ class OneStep:
             eeta = self.eta[0]
         Y_tilde5 = eeta(t_alpha)
         self.K[5] = f(tt, yy, Y_tilde5)
-        return np.array((
+        return (
             d1 * yn
             + d2 * yn_plus
             + d3 * h * self.K[0]
             + d4 * h * self.K[4]
             + d5 * h * self.K[5]
-        ))
+        )
 
     def _eta_1_t(self, theta):
         theta1 = self.params.theta1
@@ -370,13 +358,13 @@ class OneStep:
         alpha_tt = alpha(tt, self.eta[1](tt))
         Y_tilde5 = eta(alpha_tt)
         self.K[5] = f(tt, self.eta[0](tt), Y_tilde5)
-        return np.array((
+        return (
             d_d1 * yn
             + d_d2 * yn_plus
             + d_d3 * h * self.K[0]
             + d_d4 * h * self.K[4]
             + d_d5 * h * self.K[5]
-        ))
+        )
 
     def error_est_method(self):
         # Lobatto formula now for pi1 and pi2
@@ -435,15 +423,17 @@ class OneStep:
             return False
 
     def try_step_CRK(self):
-        time1 = time.time()
         success = self.one_step_RK4()
-        time2 = time.time()
         if not success:
             return False
+        if self.overlap == False:
+            eta0 = self._eta_0
+        else:
+            print('overlapping')
+            eta0 = self._hat_eta_0
         self.eta = [self._eta_0, self._eta_1]
         self.eta_t = [self._eta_1_t, self._eta_1_t]
         self.error_est_method()
-        time3 = time.time()
         local_disc_satisfied = self.disc_local_error_satistied()
         uni_local_disc_satistied = self.uni_local_error_satistied()
 
@@ -478,11 +468,11 @@ class OneStep:
             return True, self
         else:
             for i in range(max_iter - 1):
-                # disc_found = self.is_there_disc()
-                # if disc_found:
-                #     print('disc found')
-                #     print('self.disc', self.disc)
-                #     self.h = self.disc - self.t[0]
+                disc_found = self.is_there_disc()
+                if disc_found:
+                    print('disc found')
+                    print('self.disc', self.disc)
+                    self.h = float(self.disc - self.t[0])
                 success = self.try_step_CRK()
                 if success:
                     return True, self
@@ -510,25 +500,27 @@ class Solver:
         self.params = CRKParameters()
         self.eta_calls = 0
 
-    @property
+    @ property
     def eta(self):
+
         def eval(t):
             self.eta_calls += 1
             idx = bisect_right(self.t, t)
+            # Ensure t in [t_k-1, t_k] → use eta_k
             if idx == 0:
-                result = self.etas[0](t)
-            elif idx >= len(self.etas):
-                result = self.etas[-1](t)
-            elif self.t[idx - 1] <= t <= self.t[idx]:
-                result = self.etas[idx](t)
-            else:
-                result = self.etas[max(0, idx - 1)](t)
-
-            return result
+                return self.etas[0](t)
+            if idx >= len(self.etas):
+                # avoid evaluating past last known interval
+                return self.etas[-1](t)
+            if self.t[idx - 1] <= t <= self.t[idx]:
+                return self.etas[idx](t)
+            # Should not occur, but fallback safely
+            return self.etas[max(0, idx - 1)](t)
         return eval
 
     @ property
     def eta_t(self):
+
         def eval(t):
             idx = bisect_right(self.t, t)
             # Ensure t in [t_k-1, t_k] → use eta_k
@@ -547,7 +539,6 @@ class Solver:
         t, tf = self.t_span[0], self.t_span[-1]
         h = (self.params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
         # h = 0.1
-        self.f, self.alpha, self.phi, self.d_f, self.d_alpha, self.d_phi
         print("-" * 80)
         print("Initial h:", h)
         print("-" * 80)
@@ -561,19 +552,17 @@ class Solver:
         self.etas_t.append(d_phi)
         self.discs.append(t_span[0])
 
-        done = False
         while t < tf:
             # Ensure stepsize doesn't overshoot tf
             # h = min(h, tf - t)
-            if h < 1e-16:
-                print(f'step is too small, failed integration at {self.t[-1]}')
-                break
 
             if self.t[-1] + h >= tf:
                 h = tf - self.t[-1]
 
             onestep = OneStep(self, self.t[-1], h, self.y[-1])
             success, step = onestep.one_step_CRK()
+            if step.disc != False:
+                self.discs.append(step.disc)
 
             if success:  # Step accepted
                 t = self.t[-1] + step.h
@@ -581,8 +570,23 @@ class Solver:
                 self.steps.append(step)
                 self.y.append(step.y[1])
                 self.etas.append(step.eta[1])
-                if step.disc != False:
-                    self.discs.append(step.disc)
                 h = onestep.h_next  # Use adjusted stepsize from rejection
+
             else:
-                raise RuntimeError("Step failed")
+                h = onestep.h_next  # Use adjusted stepsize from rejection
+
+                print(f"Step rejected at t={t:.6f}, new h={h:.6e}")
+
+        # Final step to reach tf exactly
+        # if t > tf:  # Avoid numerical precision issues
+        #     h = tf - self.t[-1]
+        #     if h > 0:
+        #         onestep = OneStep(self, self.t[-1], h, self.y[-1])
+        #         step = onestep.one_step_CRK()
+        #         if step:
+        #             self.t.append(tf)
+        #             self.steps.append(step)
+        #             self.y.append(step.y[1])
+        #             self.etas.append(step.eta[1])
+        #         else:
+        #             print("Final step rejected, solution may be incomplete")
