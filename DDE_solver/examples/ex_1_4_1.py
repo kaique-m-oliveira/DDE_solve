@@ -3,7 +3,8 @@
 # from DDE_solver.rkh_testing import *
 # from DDE_solver.rkh import *
 # from DDE_solver.rkh_overlapping import *
-from DDE_solver.rkh_ovl_simp_newton import *
+# from DDE_solver.rkh_ovl_simp_newton import *
+from DDE_solver.rkh_vectorize import *
 # from DDE_solver.solve_dde import *
 # from DDE_solver.rkh_NDDE import *
 

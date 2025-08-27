@@ -3,7 +3,8 @@
 # from DDE_solver.rkh_testing import *
 # from DDE_solver.rkh import *
 import numpy as np
-from DDE_solver.rkh_ovl_simp_newton import *
+# from DDE_solver.rkh_ovl_simp_newton import *
+from DDE_solver.rkh_vectorize import *
 # from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
@@ -42,9 +43,9 @@ realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-print("max", max(abs(sol - realsol)))
+print("max", np.max(np.abs(sol - realsol)))
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', max(solver.y - solution))
+print('adnaed', np.max(solver.y - solution))
 
 
 plt.plot(tt, realsol, color="red", label='real solution')

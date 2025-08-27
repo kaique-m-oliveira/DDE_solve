@@ -4,7 +4,8 @@
 # from DDE_solver.rkh import *
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
-from DDE_solver.rkh_fast_ov_test_disc import *
+# from DDE_solver.rkh_fast_ov_test_disc import *
+from DDE_solver.rkh_vectorize import *
 # from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
@@ -32,13 +33,12 @@ def real_sol(t):
 
 t_span = [0, 2]
 
-solver = Solver(f, alpha, phi, t_span)
-solver.f_y = lambda t, y, x: 5
-solver.f_x = lambda t, y, x: 1
-solver.alpha_t = lambda t, y: 1
-solver.alpha_y = lambda t, y: 0
-solver.phi_t = lambda t: 0
-solver.etas_t.append(lambda t: 0)
+d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
+d_alpha = [lambda t, y: 1, lambda t, y: 0]
+def d_phi(t): return 0
+
+
+solver = Solver(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
 
 
 solver.solve_dde()

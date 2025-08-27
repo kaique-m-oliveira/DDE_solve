@@ -4,7 +4,8 @@
 # from DDE_solver.rkh import *
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
-from DDE_solver.rkh_fast_ov_test_disc import *
+from DDE_solver.rkh_vectorize import *
+# from DDE_solver.rkh_fast_ov_test_disc import *
 # from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
@@ -27,14 +28,26 @@ def real_sol(t):
 
 
 t_span = [0.5, 5]
+def f_t(t): return 0
+def f_y(t, y, x): return 0
+def f_x(t, y, x): return -1
 
-solver = Solver(f, alpha, phi, t_span)
-solver.f_y = lambda t, y, x: 0
-solver.f_x = lambda t, y, x: -1
-solver.alpha_t = lambda t, y: (e**(1 - 1 / t)) / t**2
-solver.alpha_y = lambda t, y: 0
-solver.phi_t = lambda t: 1 / t
-solver.etas_t.append(lambda t: 1 / t)
+
+d_f = [f_t, f_y, f_x]
+def alpha_t(t, y): return (np.e**(1 - 1 / t)) / t**2
+def alpha_y(t, y): return 0
+
+
+d_alpha = [alpha_t, alpha_y]
+def d_phi(t): return 1 / t
+
+
+solver = Solver(f, alpha, phi, t_span, d_f=d_f, d_alpha=d_alpha, d_phi=d_phi)
+# solver = Solver(f, alpha, phi, t_span)
+# solver.f_y = f_y
+# solver.f_x = f_x
+# solver.alpha_y = alpha_y
+# solver.phi_t = d_phi
 
 
 solver.solve_dde()
@@ -43,9 +56,9 @@ realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-print("max", max(abs(sol - realsol)))
+print("max", np.max(np.abs(sol - realsol)))
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', max(solver.y - solution))
+print('adnaed', np.max(solver.y - solution))
 
 
 plt.plot(tt, realsol, color="red", label='real solution')

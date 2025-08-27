@@ -4,43 +4,37 @@
 # from DDE_solver.rkh import *
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
-# from DDE_solver.rkh_fast_ov_test_disc import *
-from DDE_solver.rkh_vectorize import *
+from DDE_solver.rkh_fast_ov_test_disc import *
+# from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
 
 
 def f(t, y, yq):
-    return -yq + 5
+    return 1 - yq
 
 
 def phi(t):
-    if t <= -1:
-        return 9/2
-    else:
-        return -1/2
+    return np.log(t)
 
 
 def alpha(t, y):
-    return t - y**2 - 2
+    return np.exp(1 - (1/t))
 
 
 def real_sol(t):
-    if 0 <= t <= 1:
-        return (1/2)*(t - 1)
-    if 1 <= t <= 125/121:
-        return (11/2)*(t-1)
+    return np.log(t)
 
 
-t_span = [0, 2]
+t_span = [0.5, 5]
 
 solver = Solver(f, alpha, phi, t_span)
-solver.f_y = 0
-solver.f_x = -1
-solver.alpha_t = lambda t: 1
-solver.alpha_y = lambda y: -2*y
-solver.phi_t = lambda t: 0
-solver.etas_t.append(lambda t: 0)
+solver.f_y = lambda t, y, x: 0
+solver.f_x = lambda t, y, x: -1
+solver.alpha_t = lambda t, y: (e**(1 - 1 / t)) / t**2
+solver.alpha_y = lambda t, y: 0
+solver.phi_t = lambda t: 1 / t
+solver.etas_t.append(lambda t: 1 / t)
 
 
 solver.solve_dde()

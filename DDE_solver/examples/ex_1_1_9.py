@@ -4,7 +4,8 @@
 # from DDE_solver.rkh import *
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
-from DDE_solver.rkh_fast_ov_test_disc import *
+# from DDE_solver.rkh_fast_ov_test_disc import *
+from DDE_solver.rkh_vectorize import *
 # from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
