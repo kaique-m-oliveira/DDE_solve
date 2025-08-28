@@ -5,7 +5,9 @@
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
 # from DDE_solver.rkh_fast_ov_test_disc import *
-from DDE_solver.rkh_vectorize import *
+# from DDE_solver.rkh_vectorize import *
+from DDE_solver.rkh_state_complete import *
+
 # from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
@@ -21,7 +23,7 @@ def phi(t):
 
 
 def alpha(t, y):
-    return t - 1
+    return [t-1,  t-2, t-3, t-4]
 
 
 def real_sol(t):
@@ -34,7 +36,17 @@ def real_sol(t):
 t_span = [0, 2]
 
 d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
-d_alpha = [lambda t, y: 1, lambda t, y: 0]
+
+
+def alpha_t(t, y):
+    return [1, 1, 1, 1]
+
+
+def alpha_y(t, y):
+    return [0, 0, 0, 0]
+
+
+d_alpha = [alpha_t, alpha_y]
 def d_phi(t): return 0
 
 

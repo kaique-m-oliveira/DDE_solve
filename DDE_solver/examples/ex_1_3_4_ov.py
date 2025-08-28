@@ -38,25 +38,12 @@ tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 
-
 sol_processed = np.squeeze(sol)
 max_error = np.max(np.abs(sol_processed - realsol))
-print(f"Maximum element-wise difference: {max_error}")
-input('fuck')
-
-
-max_diff = 0
-for i in range(len(tt)):
-    diff = sol[i] - realsol[i]
-    if max_diff < diff:
-        max_diff = diff
-print('max_diff', max_diff)
-y = np.array(solver.y)
-print('y', type(y[0]))
-print('sol', type(sol[0]))
-print('real_sol', type(realsol[0]))
+y = np.squeeze(solver.y)
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', np.max(y - solution))
+print(f"diferença em pontos aleatórios: {max_error}")
+print('diferença na malha:', np.max(y - solution))
 #
 
 plt.plot(tt, realsol, color="red", label='real solution')
