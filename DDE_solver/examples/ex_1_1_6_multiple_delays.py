@@ -29,9 +29,17 @@ def alpha(t, y):
 
 def real_sol(t):
     if 0 <= t <= 1:
-        return 6*np.exp(5*t) - 1
-    if 1 < t <= 2:
-        return 6*(np.exp(5) + t - 6/5)*np.exp(5*t - 5) + 1/5
+        return -t
+    elif 1 < t <= 2:
+        return (1/2) * t**2 - t - (1/2)
+    elif 2 < t <= 3:
+        return (-1/6) * t**3 + (1/2) * t**2 - (7/6)
+    elif 3 < t <= 4:
+        return (1/24) * t**4 - (1/6) * t**3 - (1/4) * t**2 + t - (19/24)
+    elif 4 < t <= 5:
+        return (-1/120) * t**5 + (1/6) * t**4 - (5/3) * t**3 + (109/12) * t**2 - 24 * t + (2689/120)
+    else:
+        return np.nan
 
 
 t_span = [0, 2]
