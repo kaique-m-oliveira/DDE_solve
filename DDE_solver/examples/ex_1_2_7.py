@@ -4,7 +4,10 @@
 # from DDE_solver.rkh import *
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
-from DDE_solver.rkh_vectorize import *
+# from DDE_solver.rkh_vectorize import *
+# from DDE_solver.rkh_multiple_delays import *
+from DDE_solver.rkh_refactor import *
+# from DDE_solver.rkh_state_complete import *
 # from DDE_solver.rkh_fast_ov_test_disc import *
 # from DDE_solver.rkh_NDDE import *
 
@@ -42,7 +45,10 @@ d_alpha = [alpha_t, alpha_y]
 def d_phi(t): return 1 / t
 
 
-solver = Solver(f, alpha, phi, t_span, d_f=d_f, d_alpha=d_alpha, d_phi=d_phi)
+print(f'{'='*80}')
+print('ex_1_2_7.py')
+solver = solve_dde(f, alpha, phi, t_span, d_f=d_f,
+                   d_alpha=d_alpha, d_phi=d_phi)
 # solver = Solver(f, alpha, phi, t_span)
 # solver.f_y = f_y
 # solver.f_x = f_x
@@ -50,7 +56,6 @@ solver = Solver(f, alpha, phi, t_span, d_f=d_f, d_alpha=d_alpha, d_phi=d_phi)
 # solver.phi_t = d_phi
 
 
-solver.solve_dde()
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
@@ -60,6 +65,12 @@ sol_processed = np.squeeze(sol)
 max_error = np.max(np.abs(sol_processed - realsol))
 y = np.squeeze(solver.y)
 solution = np.array([real_sol(t) for t in solver.t])
+# input(f'realsol {realsol} type {type(realsol)} shape {realsol.shape}')
+# input(f'sol {sol} type {type(sol)} shape {sol.shape}')
+# input(f'solver.y {solver.y} type {type(solver.y)}')
+print('solution', solution)
+print('shape solver.y', solver.y)
+
 print(f"diferença em pontos aleatórios: {max_error}")
 print('diferença na malha:', np.max(y - solution))
 

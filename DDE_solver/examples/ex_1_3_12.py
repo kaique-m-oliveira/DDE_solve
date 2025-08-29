@@ -5,7 +5,7 @@
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
 # from DDE_solver.rkh_fast_ov_test_disc import *
-from DDE_solver.rkh_vectorize import *
+from DDE_solver.rkh_refactor import *
 
 # WARN: STATE EXAMPLE
 
@@ -34,7 +34,7 @@ def real_sol(t):
 
 t_span = [0, 2]
 
-solver = Solver(f, alpha, phi, t_span)
+solver = solve_dde(f, alpha, phi, t_span)
 solver.f_y = 0
 solver.f_x = -1
 solver.alpha_t = lambda t: 1

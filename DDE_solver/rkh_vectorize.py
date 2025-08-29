@@ -39,23 +39,23 @@ def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi):
     t0, tf = map(float, t_span)
     t_span = [t0, tf]
 
-    try:
-        y0 = phi(t0)
-    except Exception as e:
-        raise ValueError(
-            f"Failed to start the initial state function 'phi'. Please ensure the function is correctly defined.") from e
-
-    try:
-        alpha0 = alpha(t0, y0)
-    except TypeError as e:
-        raise ValueError(
-            f"Failed to start the delay function 'alpha'. Please ensure the function is correctly defined ") from e
-
-    try:
-        f0 = f(t0, y0, phi(alpha(t0, y0)))
-    except TypeError as e:
-        raise ValueError(
-            f"Failed to start the delay function 'f'. Please ensure the function is correctly defined ") from e
+    # try:
+    #     y0 = phi(t0)
+    # except Exception as e:
+    #     raise ValueError(
+    #         f"Failed to start the initial state function 'phi'. Please ensure the function is correctly defined.") from e
+    #
+    # try:
+    #     alpha0 = alpha(t0, y0)
+    # except TypeError as e:
+    #     raise ValueError(
+    #         f"Failed to start the delay function 'alpha'. Please ensure the function is correctly defined ") from e
+    #
+    # try:
+    #     f0 = f(t0, y0, phi(alpha(t0, y0)))
+    # except TypeError as e:
+    #     raise ValueError(
+    #         f"Failed to start the delay function 'f'. Please ensure the function is correctly defined ") from e
 
     f = vectorize_func(f)
     alpha = vectorize_func(alpha)

@@ -1,4 +1,5 @@
 import time
+import numbers
 from bisect import bisect_right
 from dataclasses import dataclass, field
 import random
@@ -28,55 +29,32 @@ class CRKParameters:
         [0, 1/2, 1/2, 1], dtype=float))
 
 
-# def vectorize_func(func):
-#     def wrapper(*args, **kwargs):
-#         # return np.array(func(*args, **kwargs))
-#         return np.atleast_1d(func(*args, **kwargs))
-#     return wrapper
-
 def vectorize_func(func):
-    def wrapper(t, *args, **kwargs):
-        t = np.atleast_1d(t)  # ensure t is an array
-        results = [func(ti, *args, **kwargs) for ti in t]
-        return np.atleast_1d(results)  # ensure output is array-like
+    def wrapper(*args, **kwargs):
+        # return np.array(func(*args, **kwargs))
+        return np.atleast_1d(func(*args, **kwargs))
     return wrapper
-
-
-def apply_delays(delays, func, t, y=None):
-    if y is None:
-        return np.atleast_1d([func(ti) for ti in t])
-
-    applied_delays = np.atleast_1d(delays(t, y))
-    result = np.array([func(t) for t in applied_delays])
-    return result
 
 
 def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi):
     t0, tf = map(float, t_span)
     t_span = [t0, tf]
+    y0 = phi(t0)
 
-    # try:
-    #     y0 = np.array(phi(t0))
-    #     ndim = len(y0)
-    # except Exception as e:
-    #     raise ValueError(
-    #         f"Failed to start the initial state function 'phi'. Please ensure the function is correctly defined.") from e
-    #
-    # try:
-    #     alpha0 = np.array(alpha(t0, y0))
-    #     ndelays = len(alpha0)
-    # except TypeError as e:
-    #     raise ValueError(
-    #         f"Failed to start the delay function 'alpha'. Please ensure the function is correctly defined.") from e
-    #
-    # try:
-    #     f0 = f(t0, y0, alpha0)
-    #     if len(f0) != len(y0):
-    #         raise TypeError(
-    #             f"Dimension of f is different from phi. Please ensure the function is correctly defined. ")
-    # except TypeError as e:
-    #     raise ValueError(
-    #         f"Failed to start the delay function 'f'. Please ensure the function is correctly defined.") from e
+    if isinstance(y0, numbers.Real) or np.isscalar(y0):
+        ndim = 1
+    elif isinstance(y0, (list, np.ndarray)):
+        ndim = len(y0)
+    else:
+        raise TypeError(f"Unsupported type for phi(t0): {type(y0)}")
+
+    alpha0 = alpha(t0, y0)
+    if isinstance(alpha0, numbers.Real) or np.isscalar(alpha0):
+        ndelays = 1
+    elif isinstance(alpha0, (list, np.ndarray)):
+        ndelays = len(alpha0)
+    else:
+        raise TypeError(f"Unsupported type for alpha(t0, phi(t0)): {alpha0}")
 
     f = vectorize_func(f)
     alpha = vectorize_func(alpha)
@@ -87,46 +65,28 @@ def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi):
         df = [vectorize_func(func) for func in d_f]
         d_alpha = [vectorize_func(func) for func in d_alpha]
         d_phi = vectorize_func(d_phi)
-        #
-        # try:
-        #     d_y0 = d_phi(t0)
-        # except Exception as e:
-        #     raise ValueError(
-        #         f"Failed to start the initial state function 'd_phi'. Please ensure the function is correctly defined.") from e
-        #
-        # try:
-        #     for func in d_alpha:
-        #         d_alpha0 = func(t0, y0)
-        # except TypeError as e:
-        #     raise ValueError(
-        #         f"Failed to start the delay function 'alpha'. Please ensure the function is correctly defined ") from e
-        #
-        # try:
-        #     for func in d_f:
-        #         d_f0 = func(t0, y0, phi(alpha(t0, y0)))
-        # except TypeError as e:
-        #     raise ValueError(
-        #         f"Failed to start the delay function 'f'. Please ensure the function is correctly defined ") from e
-        #
-        return f, alpha, phi, t_span, d_f, d_alpha, d_phi
+        return ndim, ndelays, f, alpha, phi, t_span, d_f, d_alpha, d_phi
 
     d_f = [None, None, None]
     d_alpha = [None, None]
     d_phi = [None, None]
-    return f, alpha, phi, t_span, d_f, d_alpha, d_phi
+    return ndim, ndelays, f, alpha, phi, t_span, d_f, d_alpha, d_phi
 
 
 class OneStep:
 
-    def __init__(self, solver, tn, h, yn, n_stages=8):
-        self.solver = solver
+    def __init__(self, problem, solution, h, n_stages=8):
+        tn = solution.t[-1]
+        yn = solution.y[-1]
+        self.problem = problem
+        self.solution = solution
         self.h = h
         self.t = [tn, tn + self.h]
         self.h_next = None
         self.y = [yn, 1]  # we don't have yn_plus yet
-        self.n = yn.size
+        self.n = problem.ndim
         self.y_tilde = None
-        self.K = np.zeros((n_stages, self.n), dtype=yn.dtype)
+        self.K = np.zeros((n_stages, self.n), dtype=float)
         self.eta = np.zeros(2)
         self.eta_t = np.zeros(2)
         self.disc_local_error = None
@@ -135,90 +95,63 @@ class OneStep:
         self.overlap = False
         self.test = False
         self.disc = False
-        self.ndelay = 1
+        self.ndim = problem.ndim
+        self.ndelays = problem.ndelays
 
     def is_there_disc(self):
         tn, h, yn = self.t[0], self.h, self.y[0]
-        f, eta, alpha = self.solver.f, self.solver.etas[-1], self.solver.alpha
-        discs = self.solver.discs
-        # FIX: this will break on the first step
-        hn = self.solver.t[-1] - self.solver.t[-2]
+        f, eta, alpha = self.problem.f, self.solution.etas[-1], self.problem.alpha
+        discs = self.solution.discs
+        hn = self.solution.t[-1] - self.solution.t[-2]
         # FIX: maybe not work as well
         theta = 1 + h/hn
 
         def d_zeta(t, disc):
-            return alpha(t, eta(t)) - np.full(self.ndelay, disc)
+            return alpha(t, eta(t)) - np.full(self.ndelays, disc)
 
         disc = None
         for disc in discs:
-            is_negative = np.array(
-                d_zeta(tn, disc) * d_zeta(tn + theta * h, disc) < 0)
-            if np.any(is_negative):
-                position = np.array(np.where(is_negative))
-                print('position', position)
-                self.disc = self.get_disc(disc, position[0])
+            if np.any(d_zeta(tn, disc) * d_zeta(tn + theta * h, disc) < 0):
+                self.disc = self.get_disc(disc)
                 return True
         return False
 
-    def get_disc(self, disc, position=None):
+    def get_disc(self, disc):
         rho, TOL = self.params.rho, self.params.TOL
-        alpha = self.solver.alpha
-        alpha_t, alpha_y = self.solver.d_alpha
-        eta, eta_t = self.solver.etas[-1], self.solver.etas_t[-1]
+        alpha = self.problem.alpha
+        alpha_t, alpha_y = self.problem.d_alpha
+        eta, eta_t = self.solution.etas[-1], self.solution.etas_t[-1]
         iter, max_iter = 0, 30
         t = self.t[0] + self.h/2
 
-        size = len(position)
-        # print('position', position, 'type(position)',
-        #       type(position), 'size', size)
-
         def d_zeta(t, disc):
-            aa = alpha(t, eta(t))
-            print('aa', aa)
-            a = np.array(aa)
-            print('a', a)
-            print('position', position[0])
-            # print('wtf a', a)
-            # print('a pos', a[position])
-            return a[position[0]] - np.full(size, disc)
+            return alpha(t, eta(t)) - np.full(self.problem.ndelays, disc)
 
         def d_zeta_t(t, disc):
-            f = alpha_t(t, eta(t))
-            print('f', f)
-            a = np.array(f)
-            print('a what', type(a), a)
-            a = a[position[0]]
-            print('a', a.shape, a)
-            b = np.array(alpha_y(t, eta(t)))[position[0]]
-            c = np.atleast_1d(eta_t(t))[position[0]]
-            print('b', type(b), b)
-            print('c', type(c), c)
-            return np.squeeze(a + np.dot(b, c))
-            # return alpha_t(t, eta(t)) + alpha_y(t, eta(t)) * eta_t(t)
-
-        # while np.any(d_zeta(t, disc) < np.full(self.ndelay, rho*TOL)) and iter <= max_iter:
-
+            return alpha_t(t, eta(t)) + alpha_y(t, eta(t)) * eta_t(t)
+        # while d_zeta(t, disc) < rho*TOL and iter <= max_iter:
+        # print('d_zeta', d_zeta(t, disc) > (10**-4)*rho*TOL)
         for i in range(max_iter):
-            a = -d_zeta(t, disc)
-            b = d_zeta_t(t, disc)
-            if a < rho*TOL:
-                print('d_zeta', a)
+            val = abs(d_zeta(t, disc))
+            if val < rho*TOL:
+                print('d_zeta', val)
                 print('t', t)
-                t += a/b
                 break
-            t += a/b
-
+            t += -d_zeta(t, disc)/d_zeta_t(t, disc)
         return float(t)
 
     def one_step_RK4(self):
         tn, h, yn = self.t[0], self.h, self.y[0]
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         c = self.params.c
 
         for i in range(4):
-            if np.all(alpha(tn + c[i] * h, yn + c[i] * h) <= np.full(self.ndelay, tn)):
-                aaa = alpha(tn + c[i] * h, yn + c[i] * h * self.K[i - 1])
-                Y_tilde = eta(np.array(aaa))
+            ti = tn + c[i] * h
+            yi = yn + c[i] * h
+            # input(f'alpha {alpha(ti, yi)} tn {tn}')
+            test = np.all(alpha(ti, yi) <= np.full(self.ndelays, tn))
+            if test:
+                Y_tilde = eta(alpha(ti, yi * self.K[i - 1]))
             else:  # this would be the overlapping case
                 self.overlap = True
                 success = self._simplified_Newton()
@@ -236,18 +169,18 @@ class OneStep:
         print('Newton', self.t)
         A, b, c = self.params.A, self.params.b, self.params.c
         rho, TOL = self.params.rho, self.params.TOL
-        f_t, f_y, f_x = self.solver.d_f
-        eta_t = self.solver.eta_t
-        alpha_t, alpha_y = self.solver.d_alpha
+        f_t, f_y, f_x = self.problem.d_f
+        eta_t = self.solution.eta_t
+        alpha_t, alpha_y = self.problem.d_alpha
         tn, h, yn = self.t[0], self.h, self.y[0]
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         yn_plus = self.y[1]
         # WARN: theta é uma aprox de theta_i, não sei outra forma de fazer isso
         alpha_n = alpha(tn, yn)
         f_y_n = f_y(tn, yn, eta(alpha_n))
         f_x_n = f_x(tn, yn, eta(alpha_n))
         alpha_y_n = alpha_y(tn, yn)
-        theta = (alpha_n - tn) / h
+        theta = np.squeeze((alpha_n - tn) / h)
         t2, t3 = theta**2, theta**3
 
         d1 = ((2/3) * t2 - (3/2) * theta + 1) * theta
@@ -258,20 +191,19 @@ class OneStep:
         B = np.array([[d3, d1, d1, d1], [d2, d2, d2, d2],
                       [d3, d3, d3, d3], [d4, d4, d4, d4]])
 
-        I = np.eye(4, dtype=yn.dtype)
+        I = np.eye(4)
         # FIX: gotta make this check automatic
-        if np.any(alpha_n <= np.full(self.ndelay, tn)):
+        if alpha_n <= tn:
             d_eta = eta_t
         else:
             d_eta = self._hat_eta_0_t
-
-        J = I - h * np.kron(A, f_y_n + f_x_n * d_eta(alpha_n) *
-                            alpha_y_n) - h * np.kron(B, f_x_n)
+        J = I - h * np.kron(A, f_y_n + f_x_n * d_eta(alpha_n)
+                            * alpha_y_n) - h * np.kron(B, f_x_n)
         lu, piv = lu_factor(J)
 
         def F(K):
-            calls1 = self.solver.eta_calls
-            F = np.zeros((4, self.n), dtype=yn.dtype)
+            calls1 = self.solution.eta_calls
+            F = np.zeros((4, self.ndim), dtype=float)
             for i in range(4):
                 ti = tn + c[i] * h
                 yi = yn + c[i] * h * self.K[i-1]
@@ -282,16 +214,16 @@ class OneStep:
                     eeta = self._hat_eta_0
                 Y_tilde = eeta(alpha(ti, yi))
                 F[i] = K[i] - f(ti, yi, Y_tilde)
-            calls2 = self.solver.eta_calls
-            print('eta calls from F', calls2 - calls1)
+            calls2 = self.solution.eta_calls
             return F
 
-        K = [i if i != 0 else self.K[0] for i in self.K[0:4]]
+        K = np.atleast_1d([i if i != 0 else self.K[0] for i in self.K[0:4]])
         max_iter, iter = 30, 0
         diff_old, diff_new = 4, 3  # initializing stuff
         while abs((norm(diff_new)**2)/(norm(diff_old) - norm(diff_new))) >= rho * TOL and iter <= max_iter:
             # Método de Newton usando recomposição LU
             diff_old = diff_new
+
             diff_new = lu_solve((lu, piv), - F(K))
             K += diff_new
             iter += 1
@@ -303,7 +235,7 @@ class OneStep:
     def _eta_0(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         yn_plus = self.y[1]
         t2, t3 = theta**2, theta**3
 
@@ -311,7 +243,7 @@ class OneStep:
         d2 = -2 * t3 + 3 * t2
         d3 = t3 - 2 * t2 + theta
         d4 = t3 - t2
-        if np.any(alpha(tn + h, yn_plus) <= np.full(self.ndelay, tn)):
+        if np.all(alpha(tn + h, yn_plus) <= np.full(self.ndelays, tn)):
             eeta = eta
         else:
             eeta = self._hat_eta_0
@@ -322,7 +254,7 @@ class OneStep:
     def _hat_eta_0(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         yn_plus = self.y[1]
         t2, t3 = theta**2, theta**3
 
@@ -337,7 +269,7 @@ class OneStep:
     def _hat_eta_0_t(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         yn_plus = self.y[1]
 
         d1 = 1 - 3 * theta + 2 * theta ** 2
@@ -356,7 +288,7 @@ class OneStep:
         yn, yn_plus = self.y[0], self.y[1]
         h = self.h
         tn, yn = self.t[0], self.y[0]
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         d1 = nom1 * (-3 * t2 + 2 * den1 * theta + den1) / den1
         d2 = t2 * (3 * t2 - 4 * (theta1 + 1) * theta + 6 * theta1) / den1
         d3 = (
@@ -375,7 +307,7 @@ class OneStep:
         tt = tn + theta1 * h
         yy = self.eta[0](tt)
         t_alpha = alpha(tt, yy)
-        if np.any(t_alpha <= np.full(self.ndelay, tn)):
+        if np.all(t_alpha <= np.full(self.ndelays, tn)):
             eeta = eta
         else:
             eeta = self.eta[0]
@@ -397,7 +329,7 @@ class OneStep:
         yn, yn_plus = self.y[0], self.y[1]
         h = self.h
         tn, yn = self.t[0], self.y[0]
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
         x, a = theta, theta1
 
         d_d1 = (12*(a - x)*(-1 + x)*x)/(-1 + 2 * a)
@@ -423,7 +355,7 @@ class OneStep:
 
     def error_est_method(self):
         # Lobatto formula now for pi1 and pi2
-        f, eta, alpha = self.solver.f, self.solver.eta, self.solver.alpha
+        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
 
         pi1, pi2 = (5 - np.sqrt(5)) / 10, (5 + np.sqrt(5)) / 10
         t_pi1, t_pi2 = self.t[0] + pi1 * self.h, self.t[0] + pi2 * self.h
@@ -536,27 +468,29 @@ class OneStep:
             print('max iterations reached')
 
 
-class Solver:
-
+class Problem:
     def __init__(self, f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None):
         self.t_span = np.array(t_span)
-        self.f = f
-        self.d_f = d_f
-        self.alpha = alpha
-        self.d_alpha = d_alpha
-        self.phi = phi
-        self.d_phi = d_phi
-        self.t = []
-        self.steps = []
-        self.y = []
-        self.etas = []
-        self.etas_t = []
-        self.discs = []
-        self.params = CRKParameters()
-        self.ndim = None
-        self.ndelays = None
+        self.ndim, self.ndelays, self.f, self.alpha, self.phi, self.t_span, self.d_f, self.d_alpha, self.d_phi = validade_arguments(
+            f, alpha, phi, t_span, d_f, d_alpha, d_phi)
+
+
+class Solution:
+    def __init__(self, problem: Problem):
+        self.problem = problem
+        self.t = [problem.t_span[0]]
+        self.y = [np.atleast_1d(problem.phi(problem.t_span[0]))]
+        self.etas = [problem.phi]
+        self.etas_t = [problem.d_phi]
+        self.discs = [problem.t_span[0]]
         self.eta_calls = 0
         self.eta_t_calls = 0
+
+    def update(self, t_new, y_new, interpol_new, d_interpol_new=None):
+        self.t.append(t_new)
+        self.y.append(y_new)
+        self.etas.append(interpol_new)
+        self.d_etas.append(d_interpol_new)
 
     @property
     def eta(self):
@@ -579,7 +513,7 @@ class Solver:
                     results.append(self.etas[max(0, idx - 1)](ti))
 
             # returns vector if t was vector, scalar if t was scalar
-            return np.array(results)
+            return np.squeeze(np.array(results))
         return eval
 
     @property
@@ -606,59 +540,50 @@ class Solver:
             return np.array(results)
         return eval
 
-    def solve_dde(self, discs=[]):
-        t, tf = self.t_span[0], self.t_span[-1]
-        h = (self.params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
-        # h = 0.1
-        print("-" * 80)
-        print("Initial h:", h)
-        print("-" * 80)
 
-        f, alpha, phi, t_span, d_f, d_alpha, d_phi = validade_arguments(
-            self.f, self.alpha, self.phi, self.t_span, self.d_f, self.d_alpha, self.d_phi)
+class Solver:
 
-        self.y.append(np.atleast_1d(phi(t_span[0])))
-        self.t.append(t_span[0])
-        self.etas.append(phi)
-        self.etas_t.append(d_phi)
-        self.discs.append(t_span[0])
+    def __init__(self, Problem):
+        self.problem = Problem
+        self.discs = []
+        self.params = CRKParameters()
+        self.eta_calls = 0
+        self.ndim = 0
+        self.ndelays = 0
 
-        while t < tf:
-            # Ensure stepsize doesn't overshoot tf
-            # h = min(h, tf - t)
 
-            if self.t[-1] + h >= tf:
-                h = tf - self.t[-1]
+def solve_dde(f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None):
+    problem = Problem(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
+    solution = Solution(problem)
+    params = CRKParameters()
+    t, tf = problem.t_span
+    h = (params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
+    # h = 0.1
+    print("-" * 80)
+    print("Initial h:", h)
+    print("-" * 80)
 
-            onestep = OneStep(self, self.t[-1], h, self.y[-1])
-            success, step = onestep.one_step_CRK()
-            if step.disc != False:
-                self.discs.append(step.disc)
+    while t < tf:
+        # Ensure stepsize doesn't overshoot tf
+        # h = min(h, tf - t)
+        if solution.t[-1] + h >= tf:
+            h = tf - solution.t[-1]
 
-            if success:  # Step accepted
-                t = self.t[-1] + step.h
-                print(t)
-                self.t.append(t)
-                self.steps.append(step)
-                self.y.append(step.y[1])
-                self.etas.append(step.eta[1])
-                h = onestep.h_next  # Use adjusted stepsize from rejection
+        onestep = OneStep(problem, solution, h)
+        success, step = onestep.one_step_CRK()
+        if step.disc != False:
+            solution.discs.append(step.disc)
 
-            else:
-                h = onestep.h_next  # Use adjusted stepsize from rejection
+        if success:  # Step accepted
+            t = solution.t[-1] + step.h
+            solution.t.append(t)
+            # self.steps.append(step) #WARN: useless?
+            solution.y.append(step.y[1])
+            solution.etas.append(step.eta[1])
+            solution.etas_t.append(step.eta_t[1])
+            h = onestep.h_next  # Use adjusted stepsize from rejection
 
-                print(f"Step rejected at t={t:.6f}, new h={h:.6e}")
-
-        # Final step to reach tf exactly
-        # if t > tf:  # Avoid numerical precision issues
-        #     h = tf - self.t[-1]
-        #     if h > 0:
-        #         onestep = OneStep(self, self.t[-1], h, self.y[-1])
-        #         step = onestep.one_step_CRK()
-        #         if step:
-        #             self.t.append(tf)
-        #             self.steps.append(step)
-        #             self.y.append(step.y[1])
-        #             self.etas.append(step.eta[1])
-        #         else:
-        #             print("Final step rejected, solution may be incomplete")
+        else:
+            h = onestep.h_next  # Use adjusted stepsize from rejection
+            raise (f"Step rejected at t={t:.6f}, new h={h:.6e}")
+    return solution

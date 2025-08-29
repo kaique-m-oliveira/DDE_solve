@@ -1,0 +1,7 @@
+#!/bin/zsh
+set -e  # exit on first error
+
+python ex_1_1_1_zennaro.py
+python ex_1_2_7.py
+python ex_1_4_1_system.py
+python ex_1_1_2_zennaro.py

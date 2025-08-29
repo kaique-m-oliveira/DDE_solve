@@ -4,7 +4,9 @@
 # from DDE_solver.rkh import *
 # from DDE_solver.rkh_overlapping import *
 # from DDE_solver.rkh_ovl_simp_newton import *
-from DDE_solver.rkh_vectorize import *
+# from DDE_solver.rkh_vectorize import *
+# from DDE_solver.rkh_multiple_delays import *
+from DDE_solver.rkh_refactor import *
 # from DDE_solver.solve_dde import *
 # from DDE_solver.rkh_NDDE import *
 
@@ -37,18 +39,22 @@ def phi_t(t): return [0, 0]
 t_span = [0, 3]
 
 
-solver = Solver(f, alpha, phi, t_span)
-solver.etas_t.append(phi_t)
-solver.solve_dde()  # real_sol=real_sol)
+print(f'{'='*80}')
+print('ex_1_4_1_system.py')
+solver = solve_dde(f, alpha, phi, t_span)
+# solver = Solver(f, alpha, phi, t_span)
+# solver.etas_t.append(phi_t)
+# solver.solve_dde()  # real_sol=real_sol)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-sol_processed = np.squeeze(sol)
-max_error = np.max(np.abs(sol_processed - realsol))
-y = np.squeeze(solver.y)
+max_error = np.max(np.abs(sol - realsol))
+y = solver.y
 solution = np.array([real_sol(t) for t in solver.t])
+print('solution', solution)
+print('shape solver.y', solver.y)
 print(f"diferença em pontos aleatórios: {max_error}")
 print('diferença na malha:', np.max(y - solution))
 

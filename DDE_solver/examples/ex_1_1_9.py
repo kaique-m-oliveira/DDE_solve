@@ -5,7 +5,7 @@
 import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
 # from DDE_solver.rkh_fast_ov_test_disc import *
-from DDE_solver.rkh_vectorize import *
+from DDE_solver.rkh_refactor import *
 # from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
@@ -32,24 +32,33 @@ def real_sol(t):
 
 t_span = [0, 2]
 
-solver = Solver(f, alpha, phi, t_span)
-solver.f_y = lambda t, y, x: 5
-solver.f_x = lambda t, y, x: 1
-solver.alpha_t = lambda t, y: 1
-solver.alpha_y = lambda t, y: 0
-solver.phi_t = lambda t: 0
-solver.etas_t.append(lambda t: 0)
+
+def f_y(t, y, x): return 5
+def f_x(t, y, x): return 1
 
 
-solver.solve_dde()
+d_f = [0, f_y, f_y]
+def alpha_t(t, y): return 1
+def alpha_y(t, y): return 0
+
+
+d_alpha = [alpha_t, alpha_y]
+def phi_t(t): return 0
+
+
+solver = solve_dde(f, alpha, phi, t_span, d_f=d_f,
+                   d_alpha=d_alpha, d_phi=phi_t)
+
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-print("max", max(abs(sol - realsol)))
+print('realsol', realsol)
+print('sol', sol)
+print("max", max(abs(np.squeeze(sol) - realsol)))
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', max(solver.y - solution))
+print('adnaed', max(np.squeeze(solver.y) - solution))
 
 
 plt.plot(tt, realsol, color="red", label='real solution')

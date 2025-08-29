@@ -6,7 +6,8 @@ import numpy as np
 # from DDE_solver.rkh_ovl_simp_newton import *
 # from DDE_solver.rkh_fast_ov_test_disc import *
 # from DDE_solver.rkh_vectorize import *
-from DDE_solver.rkh_state_complete import *
+from DDE_solver.rkh_refactor import *
+# from DDE_solver.rkh_state_complete import *
 
 # from DDE_solver.rkh_NDDE import *
 
@@ -50,10 +51,7 @@ d_alpha = [alpha_t, alpha_y]
 def d_phi(t): return 0
 
 
-solver = Solver(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
-
-
-solver.solve_dde()
+solver = solve_dde(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])

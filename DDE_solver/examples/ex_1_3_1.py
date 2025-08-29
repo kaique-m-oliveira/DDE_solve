@@ -3,7 +3,7 @@
 # from DDE_solver.rkh_step_rejection import *
 # from DDE_solver.rkh_ovl_simp_newton import *
 # from DDE_solver.rkh_fast_ov_test_disc import *
-from DDE_solver.rkh_vectorize import *
+from DDE_solver.rkh_refactor import *
 
 
 # WARN: STATE EXAMPLE
@@ -27,8 +27,7 @@ def real_sol(t):
 
 t_span = [1, 4]
 
-solver = Solver(f, alpha, phi, t_span)
-solver.solve_dde(discs=[2])
+solver = solve_dde(f, alpha, phi, t_span)
 
 tt = np.linspace(t_span[0], t_span[1] - 0.05, 100)
 realsol = np.array([real_sol(t) for t in tt])
