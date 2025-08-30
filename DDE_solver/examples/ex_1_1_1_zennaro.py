@@ -6,6 +6,7 @@ import numpy as np
 # from DDE_solver.rkh_vectorize import *
 # from DDE_solver.rkh_multiple_delays import *
 from DDE_solver.rkh_refactor import *
+# from DDE_solver.rkh_refactor_before_chatgpt import *
 # from DDE_solver.rkh_state_complete import *
 # from DDE_solver.rkh_NDDE import *
 
@@ -58,11 +59,11 @@ realsol = np.array([real_sol(t) for t in tt])
 sol = [solver.eta(i) for i in tt]
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
-print("max", np.max(np.abs(sol - realsol)))
+print("max", np.max(np.abs(np.squeeze(sol) - np.squeeze(realsol))))
 solution = np.array([real_sol(t) for t in solver.t])
 print('solution', solution)
 print('shape solver.y', solver.y)
-print('adnaed', np.max(solver.y - solution))
+print('adnaed', np.max(np.squeeze(solver.y) - np.squeeze(solution)))
 
 
 print('sol', len(sol))
