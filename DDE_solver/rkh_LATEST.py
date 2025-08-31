@@ -160,12 +160,12 @@ class OneStep:
             disc_position = d_zeta(tn, disc) * d_zeta(tn + theta * h, disc) < 0
             if np.any(disc_position):
                 new_disc = self.get_disc(disc, disc_position)
-                print(
-                    '//////////////////////////////////////////////////////////////////////////')
+                # print(
+                #     '//////////////////////////////////////////////////////////////////////////')
                 # print('DISC POSITION', disc_posi)
                 # print('NEW DISCS', new_discs)
                 # new_disc = new_discs[disc_position]
-                print('NEW DISC', new_disc)
+                # print('NEW DISC', new_disc)
                 self.disc = new_disc
                 return True
         return False
@@ -229,8 +229,8 @@ class OneStep:
         self.test = False
         self.disc = False
 
-        print('============================RK STEP================================')
-        print('tn = ', tn, 'h = ', h, 'tn + h = ', tn + h)
+        # print('============================RK STEP================================')
+        # print('tn = ', tn, 'h = ', h, 'tn + h = ', tn + h)
         # print("self.problem", self.problem)
         # print("self.solution", self.solution)
         # print("self.h", self.h)
@@ -269,8 +269,8 @@ class OneStep:
                 alpha_i = alpha(ti, yi)
                 real_alpha_i = alpha(ti, yi)
                 Y_tilde = eta(alpha_i)
-                print('alpha_i', alpha_i)
-                print('Y_tilde', Y_tilde)
+                # print('alpha_i', alpha_i)
+                # print('Y_tilde', Y_tilde)
                 # Y_ex = real_sol(alpha(ti, real_sol(ti)))
                 # print(f'ERROR Y_tilde[{i}], {abs(Y_tilde - Y_ex)}')
                 # print(f'SHAPES: Y_tilde {Y_tilde.shape} yn {yn.shape} c[i] {c[i].shape} yi {
@@ -292,11 +292,11 @@ class OneStep:
 
         self.y[1] = yn + h * (self.K[0] / 6 + self.K[1] /
                               3 + self.K[2] / 3 + self.K[3] / 6)
-        print('>>>>>>>>>>>>>>>>>>>>>>>check values<<<<<<<<<<<<<<<<<<<<<<<<<<<')
-        print('y[0]', self.y[0], 'real_sol(tn)', real_sol(
-            tn),  'ERROR:', self.y[0] - real_sol(tn))
-        print('y[1]', self.y[1], 'realsol(tn + h)', real_sol(tn + h),
-              'ERROR:', self.y[1] - real_sol(tn + h))
+        # print('>>>>>>>>>>>>>>>>>>>>>>>check values<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+        # print('y[0]', self.y[0], 'real_sol(tn)', real_sol(
+        #     tn),  'ERROR:', self.y[0] - real_sol(tn))
+        # print('y[1]', self.y[1], 'realsol(tn + h)', real_sol(tn + h),
+        #       'ERROR:', self.y[1] - real_sol(tn + h))
 
         return True
 
@@ -594,11 +594,11 @@ class OneStep:
                 disc_found = self.is_there_disc()
                 if disc_found:
                     self.solution.discs.append(disc_found)
-                    print(
-                        '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||')
-                    print('disc found at', self.disc)
-                    print(
-                        '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||')
+                    # print(
+                    #     '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||')
+                    # print('disc found at', self.disc)
+                    # print(
+                    #     '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||')
                     self.h = float(self.disc - self.t[0])
                     # print(f'h = {self.h} new t will be {self.t[0] + self.h}')
                     # input('dnaudne')

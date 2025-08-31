@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 # from DDE_solver.rkh_fast_ov_test_disc import *
 # from DDE_solver.rkh_vectorize import *
 from DDE_solver.rkh_refactor import *
+# from DDE_solver.rkh_refactor_working import *
+# from DDE_solver.rkh_multiple_delays import *
+# from DDE_solver.rkh_LATEST import *
 # from DDE_solver.rkh_state_complete import *
 
 # from DDE_solver.rkh_NDDE import *
@@ -21,7 +24,10 @@ def f(t, y, x):
 
 
 def phi(t):
-    return 1 if t < 0 else 0
+    if t < 0:
+        return 1
+    else:
+        return 0
 
 
 def alpha(t, y):
@@ -44,7 +50,7 @@ def real_sol(t):
         return np.nan
 
 
-t_span = [0, 0.9]
+t_span = [0, 2]
 
 d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
 
@@ -70,7 +76,7 @@ def d_phi(t): return 0
 solver = solve_dde(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
-sol = np.array([solver.eta(i) for i in tt])
+sol = np.array([solver.eta(i, epsilon=0) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
 print("max", np.max(abs(sol - realsol)))
