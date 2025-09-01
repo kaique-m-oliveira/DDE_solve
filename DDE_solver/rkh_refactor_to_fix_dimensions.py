@@ -127,7 +127,9 @@ class OneStep:
                     results.append(self.solution.eta(ti))
                 else:
                     results.append(self._hat_eta_0(ti))
-            return np.squeeze(results)
+            # return np.squeeze(results)
+            # return np.atleast_1d(results)
+            return np.vstack(results)
         return eval
 
     def is_there_disc(self):
@@ -601,9 +603,10 @@ class OneStep:
 class Problem:
     def __init__(self, f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None):
         self.t_span = np.array(t_span)
-        self.ndim, self.ndelays, self.f, self.alpha, self.phi, self.t_span, self.d_f, self.d_alpha_old, self.d_phi = validade_arguments(
+        self.ndim, self.ndelays, self.f, self.alpha, self.phi, self.t_span, self.d_f_old, self.d_alpha_old, self.d_phi = validade_arguments(
             f, alpha, phi, t_span, d_f, d_alpha, d_phi)
         self.d_alpha = self.get_d_alpha()
+        self.d_f = self.get_d_f()
 
     def get_d_alpha(self):
         alpha = self.alpha
@@ -624,6 +627,41 @@ class Problem:
             return np.atleast_1d(val)
 
         return alpha_t, alpha_y
+
+    def get_d_f(self):
+        alpha = self.alpha
+        f = self.f
+        h = 1e-15
+
+        def unit_vec(j): return np.atleast_1d(
+            [1 if i == j else 0 for i in range(5)])
+
+        def f_t(t, y, x):
+            return (f(t, y, x) - f(t - h, y, x))/(2*h)
+
+        def f_y(t, y, x):
+            val = np.array([None for i in range(self.ndim)])
+            for j in range(self.ndim):
+                val[j] = (f(t, y, x) - f(t, y - unit_vec(j), x))/(2*h)
+            return np.atleast_1d(val)
+
+        def f_x(t, y, x):
+            delays = [None for i in range(self.ndelays)]
+            val = np.array([None for i in range(self.ndim)])
+
+            def new(x, j, h):
+                print('x', x, 'shape', x.shape)
+                print('j', j, 'h', h)
+                x[j] += h
+                return x
+
+            for i in range(self.ndelays):
+                for j in range(self.ndim):
+                    val[j] = (f(t, y, x) - f(t, y, new(x, j, h)))/(2*h)
+                delays[i] = val
+            return delays
+
+        return f_t, f_y, f_x
 
 
 class Solution:
@@ -681,7 +719,8 @@ class Solution:
                 else:
                     results.append(self.etas[max(0, idx - 1)](ti))
 
-            return np.squeeze(results)
+            # return np.squeeze(results)
+            return np.atleast_1d(results)
         return eval
 
     @property
@@ -704,7 +743,8 @@ class Solution:
                 else:
                     results.append(self.etas_t[max(0, idx - 1)](ti))
 
-            return np.squeeze(results)
+            # return np.squeeze(results)
+            return np.atleast_1d(results)
         return eval
 
 
@@ -735,5 +775,12 @@ def solve_dde(f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None):
             raise ValueError(status)
         h = onestep.h_next
         t = solution.t[-1]
+
+    print('solution', solution.y)
+    t0 = problem.t_span[0]
+    etas = [solution.eta(t) for t in np.linspace(t0, tf, 100)]
+    print('_________________________________________________________________')
+    print('eta', etas)
+    input('stop')
 
     return solution
