@@ -50,7 +50,7 @@ def real_sol(t):
         return np.nan
 
 
-t_span = [0, 2]
+t_span = [0, 5]
 
 d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
 
@@ -76,7 +76,7 @@ def d_phi(t): return 0
 solver = solve_dde(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
-sol = np.array([solver.eta(i, epsilon=0) for i in tt])
+sol = np.array([solver.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
 print("max", np.max(abs(sol - realsol)))

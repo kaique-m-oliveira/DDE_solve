@@ -36,34 +36,6 @@ def vectorize_func(func):
     return wrapper
 
 
-def real_alpha(t, y):
-    return t - 1
-
-
-def real_sol(t):
-    result = []
-    if isinstance(t, (float, int)):
-        t = [t]
-    for ti in t:
-        if ti < 0:
-            result.append(1)
-        elif 0 <= ti <= 1:
-            result.append(-ti)
-        elif 1 < ti <= 2:
-            result.append((1/2) * ti**2 - ti - (1/2))
-        elif 2 < ti <= 3:
-            result.append((-1/6) * ti**3 + (1/2) * ti**2 - (7/6))
-        elif 3 < ti <= 4:
-            result.append((1/24) * ti**4 - (1/6) * ti **
-                          3 - (1/4) * ti**2 + ti - (19/24))
-        elif 4 < ti <= 5:
-            result.append((-1/120) * ti**5 + (1/6) * ti**4 - (5/3)
-                          * ti**3 + (109/12) * ti**2 - 24 * ti + (2689/120))
-        else:
-            result.append(np.nan)
-    return np.array(result)
-
-
 def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi):
     t0, tf = map(float, t_span)
     t_span = [t0, tf]
@@ -101,6 +73,22 @@ def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi):
     return ndim, ndelays, f, alpha, phi, t_span, d_f, d_alpha, d_phi
 
 
+def real_sol(t):
+
+    if 0 <= t <= 1:
+        return -t
+    elif 1 < t <= 2:
+        return (1/2) * t**2 - t - (1/2)
+    elif 2 < t <= 3:
+        return (-1/6) * t**3 + (1/2) * t**2 - (7/6)
+    elif 3 < t <= 4:
+        return (1/24) * t**4 - (1/6) * t**3 - (1/4) * t**2 + t - (19/24)
+    elif 4 < t <= 5:
+        return (-1/120) * t**5 + (1/6) * t**4 - (5/3) * t**3 + (109/12) * t**2 - 24 * t + (2689/120)
+    else:
+        return np.nan
+
+
 class OneStep:
 
     def __init__(self, problem, solution, h, n_stages=8):
@@ -115,8 +103,9 @@ class OneStep:
         self.n = problem.ndim
         self.y_tilde = None
         self.K = np.zeros((n_stages, self.n), dtype=float)
-        self.eta = np.zeros(2)
-        self.eta_t = np.zeros(2)
+        self.eta = solution.eta
+        self.new_eta = np.zeros(2)
+        self.new_eta_t = np.zeros(2)
         self.disc_local_error = None
         self.uni_local_error = None
         self.params = CRKParameters()
@@ -125,6 +114,7 @@ class OneStep:
         self.disc = False
         self.ndim = problem.ndim
         self.ndelays = problem.ndelays
+        self.fails = 0
 
     @property
     def eeta(self):
@@ -156,16 +146,10 @@ class OneStep:
         disc = None
         for disc in discs:
             is_delay = d_zeta(tn, disc) * d_zeta(tn + theta * h, disc) < 0
-            # print('is delay', is_delay)
+            # input(f'is delay {is_delay}')
             disc_position = d_zeta(tn, disc) * d_zeta(tn + theta * h, disc) < 0
             if np.any(disc_position):
                 new_disc = self.get_disc(disc, disc_position)
-                # print(
-                #     '//////////////////////////////////////////////////////////////////////////')
-                # print('DISC POSITION', disc_posi)
-                # print('NEW DISCS', new_discs)
-                # new_disc = new_discs[disc_position]
-                # print('NEW DISC', new_disc)
                 self.disc = new_disc
                 return True
         return False
@@ -176,15 +160,12 @@ class OneStep:
         alpha_t, alpha_y = self.problem.d_alpha
         eta, eta_t = self.solution.etas[-1], self.solution.etas_t[-1]
         iter, max_iter = 0, 30
-        # t = np.full(self.problem.ndelays, self.t[0] + self.h/2)
-        # print('shape t', t.shape)
         t = self.t[0] + self.h/2
 
         # def d_zeta(t, disc):
         t_values = []
         for index in np.where(disc_position)[0].tolist():
             def d_zeta(t):
-                # print('eta(t)', eta(t))
                 a = alpha(t, eta(t))[index]
                 b = disc
                 return a - b
@@ -213,51 +194,14 @@ class OneStep:
 
     def one_step_RK4(self):
         tn, h, yn = self.t[0], self.h, self.y[0]
-        self.h = h
-        self.t = [tn, tn + self.h]
-        self.h_next = None
-        self.y = [yn, 1]  # we don't have yn_plus yet
-        self.n = self.problem.ndim
-        self.y_tilde = None
-        self.K = np.zeros((8, self.n), dtype=float)
-        self.eta = np.zeros(2)
-        self.eta_t = np.zeros(2)
-        self.disc_local_error = None
-        self.uni_local_error = None
-        self.params = CRKParameters()
-        self.overlap = False
-        self.test = False
-        self.disc = False
 
-        # print('============================RK STEP================================')
-        # print('tn = ', tn, 'h = ', h, 'tn + h = ', tn + h)
-        # print("self.problem", self.problem)
-        # print("self.solution", self.solution)
-        # print("self.h", self.h)
-        # print("self.t", self.t)
-        # print("self.h_next", self.h_next)
-        # print("self.y", self.y)
-        # print("self.n", self.n)
-        # print("self.y_tilde", self.y_tilde)
-        # print("self.K", self.K)
-        # print("self.eta", self.eta)
-        # print("self.eta_t", self.eta_t)
-        # print("self.disc_local_error", self.disc_local_error)
-        # print("self.uni_local_error", self.uni_local_error)
-        # print("self.params", self.params)
-        # print("self.overlap", self.overlap)
-        # print("self.test", self.test)
-        # print("self.disc", self.disc)
-        # print("self.ndim", self.ndim)
-        # print("self.ndelays", self.ndelays)
-        # f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
-        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
+        print('___________________________RK4________________________________')
+        print(f'tn = {tn}, h = {h}, yn = {yn} real_sol {real_sol(tn)}')
+
+        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
         c = self.params.c
-        # print(f' TESTING eta(1) {eta(1)} realsol(1) {real_sol(1)}')
         realf = np.zeros(4)
         self.K[0] = f(tn, yn, eta(alpha(tn, yn)))
-        # realf[0] = f(tn, yn, real_sol(alpha(tn, yn)))
-        # print('ERROR K0', self.K[0] - realf[0])
 
         # WARN: this one is mine
         for i in range(1, 4):
@@ -265,51 +209,34 @@ class OneStep:
             yi = yn + c[i] * h * self.K[i - 1]
             if np.all(alpha(ti, yi) <= np.full(self.ndelays, tn)):
                 def real_alpha(t, y): return [t-1,  t-2, t-3, t-4]
-                # print('ERROR alpha', max(alpha_i - real_alpha_i))
                 alpha_i = alpha(ti, yi)
                 real_alpha_i = alpha(ti, yi)
                 Y_tilde = eta(alpha_i)
-                # print('alpha_i', alpha_i)
-                # print('Y_tilde', Y_tilde)
-                # Y_ex = real_sol(alpha(ti, real_sol(ti)))
-                # print(f'ERROR Y_tilde[{i}], {abs(Y_tilde - Y_ex)}')
-                # print(f'SHAPES: Y_tilde {Y_tilde.shape} yn {yn.shape} c[i] {c[i].shape} yi {
-                #       yi.shape} self.K[i - 1] {self.K[i-1].shape}')
-                # Y_tilde = eta(alpha(ti, yi * self.K[i - 1]))
                 self.K[i] = f(ti, yi, Y_tilde)
-                # K_ex = f(ti, real_sol(ti), Y_ex)
-                # print(f'ERROR K[{i}] {self.K[i] - K_ex}')
             else:  # this would be the overlapping case
                 self.overlap = True
                 success = self._simplified_Newton()
-                print('successfull newton')
                 if not success:
                     return False
                 break
-        # WARN: above is mine
-            # self.K[i] = f(tn + c[i] * h, yn + c[i] * h * self.K[i-1], Y_tilde)
-            # realf[i] = f(tn + c[i] * h, real_sol(tn + c[i] * h), Y_ex)
 
         self.y[1] = yn + h * (self.K[0] / 6 + self.K[1] /
                               3 + self.K[2] / 3 + self.K[3] / 6)
-        # print('>>>>>>>>>>>>>>>>>>>>>>>check values<<<<<<<<<<<<<<<<<<<<<<<<<<<')
-        # print('y[0]', self.y[0], 'real_sol(tn)', real_sol(
-        #     tn),  'ERROR:', self.y[0] - real_sol(tn))
-        # print('y[1]', self.y[1], 'realsol(tn + h)', real_sol(tn + h),
-        #       'ERROR:', self.y[1] - real_sol(tn + h))
 
+        print(
+            f'tn+1 = {tn + h}, yn+1 = {self.y[1]} real_sol {real_sol(tn + h)}')
+        print(f' ERROR {self.y[1] - real_sol(tn + h)}')
         return True
 
     def _simplified_Newton(self):
         time1 = time.time()
-        print('Newton', self.t)
         A, b, c = self.params.A, self.params.b, self.params.c
         rho, TOL = self.params.rho, self.params.TOL
         f_t, f_y, f_x = self.problem.d_f
         eta_t = self.solution.eta_t
         alpha_t, alpha_y = self.problem.d_alpha
         tn, h, yn = self.t[0], self.h, self.y[0]
-        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
+        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
         yn_plus = self.y[1]
         # WARN: theta é uma aprox de theta_i, não sei outra forma de fazer isso
         alpha_n = alpha(tn, yn)
@@ -342,13 +269,18 @@ class OneStep:
             F = np.zeros((4, self.ndim), dtype=float)
             for i in range(4):
                 ti = tn + c[i] * h
-                yi = yn + c[i] * h * self.K[i-1]
-                # FIX: gotta make this check automatic
+                yi = yn + c[i] * h * K[i-1]
                 Y_tilde = self.eeta(alpha(ti, yi))
-                F[i] = self.K[i] - f(ti, yi, Y_tilde)
+                F[i] = K[i] - f(ti, yi, Y_tilde)
             return F
 
         self.K[0:4] = [i if i != 0 else self.K[0] for i in self.K[0:4]]
+
+        # sol = root(F, np.squeeze(self.K[0:4]), tol=rho*TOL)
+        # for i in range(4):
+        #     self.K[i] = sol.x[i]
+        # return True
+
         max_iter, iter = 30, 0
         diff_old, diff_new = 4, 3  # initializing stuff
         while abs((norm(diff_new)**2)/(norm(diff_old) - norm(diff_new))) >= rho * TOL and iter <= max_iter:
@@ -366,7 +298,7 @@ class OneStep:
     def _eta_0(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
-        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
+        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
         yn_plus = self.y[1]
         t2, t3 = theta**2, theta**3
 
@@ -419,7 +351,7 @@ class OneStep:
         yn, yn_plus = self.y[0], self.y[1]
         h = self.h
         tn, yn = self.t[0], self.y[0]
-        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
+        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
         d1 = nom1 * (-3 * t2 + 2 * den1 * theta + den1) / den1
         d2 = t2 * (3 * t2 - 4 * (theta1 + 1) * theta + 6 * theta1) / den1
         d3 = (
@@ -436,7 +368,7 @@ class OneStep:
         )
         d5 = t2 * nom1 / (2 * theta1 * den1 * (theta1 - 1))
         tt = tn + theta1 * h
-        yy = self.eta[0](tt)
+        yy = self.new_eta[0](tt)
         t_alpha = alpha(tt, yy)
         # if np.all(t_alpha <= np.full(self.ndelays, tn)):
         #     eeta = eta
@@ -460,7 +392,7 @@ class OneStep:
         yn, yn_plus = self.y[0], self.y[1]
         h = self.h
         tn, yn = self.t[0], self.y[0]
-        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
+        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
         x, a = theta, theta1
 
         d_d1 = (12*(a - x)*(-1 + x)*x)/(-1 + 2 * a)
@@ -473,9 +405,9 @@ class OneStep:
             (a - 3 * (a ** 2) + 2 * (a ** 3))
 
         tt = tn + theta1 * h
-        alpha_tt = alpha(tt, self.eta[1](tt))
+        alpha_tt = alpha(tt, self.new_eta[1](tt))
         Y_tilde5 = eta(alpha_tt)
-        self.K[5] = f(tt, self.eta[0](tt), Y_tilde5)
+        self.K[5] = f(tt, self.new_eta[0](tt), Y_tilde5)
         return (
             d_d1 * yn
             + d_d2 * yn_plus
@@ -486,16 +418,16 @@ class OneStep:
 
     def error_est_method(self):
         # Lobatto formula now for pi1 and pi2
-        f, eta, alpha = self.problem.f, self.solution.eta, self.problem.alpha
+        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
 
         pi1, pi2 = (5 - np.sqrt(5)) / 10, (5 + np.sqrt(5)) / 10
         t_pi1, t_pi2 = self.t[0] + pi1 * self.h, self.t[0] + pi2 * self.h
-        tt1 = self.eta[1](t_pi1)
+        tt1 = self.new_eta[1](t_pi1)
         t1 = alpha(t_pi1, tt1)
         Y_tilde6 = eta(t1)
-        self.K[6] = f(t_pi1, self.eta[1](t_pi1), Y_tilde6)
-        Y_tilde7 = eta(alpha(t_pi2, self.eta[1](t_pi2)))
-        self.K[7] = f(t_pi2, self.eta[1](t_pi2), Y_tilde7)
+        self.K[6] = f(t_pi1, self.new_eta[1](t_pi1), Y_tilde6)
+        Y_tilde7 = eta(alpha(t_pi2, self.new_eta[1](t_pi2)))
+        self.K[7] = f(t_pi2, self.new_eta[1](t_pi2), Y_tilde7)
         self.y_tilde = self.y[0] + self.h * (
             (1/12)*self.K[0] + (5/12) * self.K[6] +
             (5/12) * self.K[7] + (1/12) * self.K[4]
@@ -505,16 +437,11 @@ class OneStep:
         self.disc_local_error = (
             np.linalg.norm(self.y_tilde - self.y[1]) / self.h
         )  # eq 7.3.4
-        # print('--------------------------------------------------------------')
-        # print(
-        #     f'disc_error at tn + h {self.t[0] + self.h}, tn = {self.t[0]}, h = {self.h}')
-        # print('disc_local_error', self.disc_local_error)
-        # input(f'real error is {self.y[1] - real_sol(self.t[0] + self.h)}')
 
         if self.disc_local_error <= self.params.TOL:
             return True
         else:
-            self.h = self. h * (
+            self.h = min(1, self. h * (
                 max(
                     self.params.omega_min,
                     min(
@@ -523,25 +450,28 @@ class OneStep:
                         * (self.params.TOL / self.disc_local_error) ** (1 / 4),
                     ),
                 )
-            )
+            ))
+
+            self.t = [self.t[0], self.t[0] + self.h]
             return False
 
     def uni_local_error_satistied(self):
 
         tn, h = self.t[0], self.h
         self.uni_local_error = (
-            h * np.linalg.norm(self.eta[0](tn + (1/2) * h) - self.eta[1](tn + (1/2)*h)))
+            h * np.linalg.norm(self.new_eta[0](tn + (1/2) * h) - self.new_eta[1](tn + (1/2)*h)))
         # eq 7.3.4
 
-        if self.disc_local_error <= self.params.TOL:
+        if self.uni_local_error <= self.params.TOL:
             return True
         else:
-            self.h = self.h * (
+            self.h = min(1, self.h * (
                 max(
                     self.params.omega_min, self.params.rho *
-                    (self.params.TOL / self.disc_local_error) ** (1 / 5)
+                    (self.params.TOL / self.uni_local_error) ** (1 / 5)
                 )
-            )
+            ))
+            self.t = [self.t[0], self.t[0] + self.h]
             return False
 
     def try_step_CRK(self):
@@ -553,26 +483,29 @@ class OneStep:
         else:
             print('overlapping')
             eta0 = self._hat_eta_0
-        self.eta = [self._eta_0, self._eta_1]
-        self.eta_t = [self._eta_1_t, self._eta_1_t]
+        self.new_eta = [self._eta_0, self._eta_1]
+        self.new_eta_t = [self._eta_1_t, self._eta_1_t]
         self.error_est_method()
-        local_disc_satisfied = self.disc_local_error_satistied()
         uni_local_disc_satistied = self.uni_local_error_satistied()
+
+        if not uni_local_disc_satistied:
+            print(f'failed uniform step at t = {
+                  self.t[0] + self.h} with h = {self.h}')
+            return False
+
+        local_disc_satisfied = self.disc_local_error_satistied()
 
         if not local_disc_satisfied:
             print(f'failed discrete step at t = {
                   self.t[0] + self.h} with h = {self.h}')
             return False
 
-        if not uni_local_disc_satistied:
-            print(f'failed uniform step with h = {self.h}')
-            return False
         # print(f'successfull step with h = {self.h}')
         # Handling divide by zero case
         if self.disc_local_error < 1e-14 or self.uni_local_error < 1e-14:
-            self.h_next = self.params.omega_max * self.h
+            self.h_next = min(1, self.params.omega_max * self.h)
         else:
-            self.h_next = self.h * max(
+            self.h_next = min(1, self.h * max(
                 self.params.omega_min,
                 min(
                     self.params.omega_max,
@@ -581,33 +514,60 @@ class OneStep:
                     self.params.rho * (self.params.TOL /
                                        self.uni_local_error)**(1/5)
                 )
-            )
+            ))
 
         return True
 
     def one_step_CRK(self, max_iter=100):
+        time1 = time.time()
+        calls1 = self.solution.eta_calls
+        success = self.try_step_CRK()
+        time2 = time.time()
+        calls2 = self.solution.eta_calls
+        print('calls', calls2 - calls1)
+        print('times', time2 - time1)
+        if success:
+            return True, self
+        else:
+            for i in range(max_iter - 1):
+                time1 = time.time()
+                calls1 = self.solution.eta_calls
+                disc_found = self.is_there_disc()
+                if disc_found:
+                    new_h = self.disc - self.t[0]
+                    print('new_h', new_h, 'type', type(new_h))
+                    print('self.h', self.h)
+                    print('self.h_next ', self.h_next)
+                    if new_h < self.h:
+                        print('disc_found', disc_found)
+                        if new_h not in self.solution.discs:
+                            self.solution.discs.append(disc_found)
+                        self.h = float(new_h)
+                        self.t = [self.t[0], self.t[0] + self.h]
+                    # input('stop')
+                success = self.try_step_CRK()
+                calls2 = self.solution.eta_calls
+                time2 = time.time()
+                print('calls', calls2 - calls1)
+                print('time', time2 - time1)
+                if success:
+                    return True, self
+
+            return False, 0
+
+    def first_step_CRK(self, max_iter=100):
+        self.eta = self.solution.first_step_eta
+        # print('why')
         success = self.try_step_CRK()
         if success:
             return True, self
         else:
             for i in range(max_iter - 1):
-                disc_found = self.is_there_disc()
-                if disc_found:
-                    self.solution.discs.append(disc_found)
-                    # print(
-                    #     '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||')
-                    # print('disc found at', self.disc)
-                    # print(
-                    #     '||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||')
-                    self.h = float(self.disc - self.t[0])
-                    # print(f'h = {self.h} new t will be {self.t[0] + self.h}')
-                    # input('dnaudne')
                 success = self.try_step_CRK()
                 if success:
                     return True, self
 
             return False, 0
-            print('max iterations reached')
 
 
 class Problem:
@@ -627,17 +587,62 @@ class Solution:
         self.discs = [problem.t_span[0]]
         self.eta_calls = 0
         self.eta_t_calls = 0
+        self.t_next = None
 
-    def update(self, t_new, y_new, interpol_new, d_interpol_new=None):
-        self.t.append(t_new)
-        self.y.append(y_new)
-        self.etas.append(interpol_new)
-        self.d_etas.append(d_interpol_new)
+    def update(self, onestep):
+        success, step = onestep
+        if step.disc != False:
+            self.discs.append(step.disc)
+
+        if success:  # Step accepted
+            if (self.t[-1] + step.h != step.t[1]):
+                # print('sum', self.t[-1] + step.h, 't1', step.t[1])
+                print('[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[')
+                print('tn + h', self.t[-1] + step.h, 't1',  step.t[1])
+                print('values fucked')
+                print('[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[')
+            self.t.append(step.t[0] + step.h)
+            self.y.append(step.y[1])
+            self.etas.append(step.new_eta[1])
+            self.etas_t.append(step.new_eta_t[1])
+            # h = step.h_next  # Use adjusted stepsize from rejection
+            return None
+
+        else:
+            raise ValueError("Failed")
+            return "Failed"
+
+    @property
+    def first_step_eta(self):
+        def eval(t, epsilon=1e-15):
+
+            self.eta_calls += 1
+            t = np.atleast_1d(t)  # accept scalar or array
+
+            results = []
+            for ti in t:
+                if ti == self.problem.t_span[0]:
+                    # print(0, 'ti', ti)
+                    # print('dude', self.problem.phi(0))
+                    results.append(self.problem.phi(0))
+
+                elif ti in self.discs:
+                    # print(1, 'ti', ti)
+                    results.append(self.problem.phi(ti))
+                    # results.append(self.etas[0](ti - epsilon))
+
+                else:
+                    # print(2, 'ti', ti)
+                    results.append(self.problem.phi(ti))
+
+            # returns vector if t was vector, scalar if t was scalar
+            return np.squeeze(results)
+        return eval
 
     # WARN: My version
     @property
     def eta(self):
-        def eval(t, epsilon=1e-15):
+        def eval(t):
 
             self.eta_calls += 1
             t = np.atleast_1d(t)  # accept scalar or array
@@ -647,20 +652,22 @@ class Solution:
                 idx = bisect_right(self.t, ti)
 
                 if idx == 0:
-                    if ti in self.discs:
-                        results.append(self.etas[0](ti - epsilon))
-                    else:
-                        results.append(self.etas[0](ti))
+                    # if ti == self.problem.t_span[0]:
+                    #     results.append(self.problem.phi(0))
+                    # if ti in self.discs:
+                    #     results.append(self.etas[0](ti - epsilon))
+                    # else:
+                    results.append(self.etas[0](ti))
                 elif idx >= len(self.etas):
-                    if ti in self.discs:
-                        results.append(self.etas[-2](ti - epsilon))
-                    else:
-                        results.append(self.etas[-1](ti))
+                    # if ti in self.discs:
+                    #     results.append(self.etas[-2](ti - epsilon))
+                    # else:
+                    results.append(self.etas[-1](ti))
                 elif self.t[idx - 1] <= ti <= self.t[idx]:
-                    if ti in self.discs:
-                        results.append(self.etas[idx - 1](ti - epsilon))
-                    else:
-                        results.append(self.etas[idx](ti))
+                    # if ti in self.discs:
+                    #     results.append(self.etas[idx - 1](ti - epsilon))
+                    # else:
+                    results.append(self.etas[idx](ti))
                 else:
                     # fallback safeguard
                     # raise ValueError('is this right?')
@@ -669,6 +676,32 @@ class Solution:
             # returns vector if t was vector, scalar if t was scalar
             return np.squeeze(results)
         return eval
+
+    # @property
+    # def eta(self):
+    #     def eval(t):
+    #
+    #         self.eta_calls += 1
+    #         t = np.atleast_1d(t)  # accept scalar or array
+    #
+    #         results = []
+    #         for ti in t:
+    #             idx = bisect_right(self.t, ti)
+    #
+    #             if idx == 0:
+    #                 # if ti == self.problem.t_span[0]:
+    #                 #     results.append(self.problem.phi(0))
+    #                 results.append(self.etas[0](ti))
+    #             elif idx >= len(self.etas):
+    #                 results.append(self.etas[-1](ti))
+    #             elif self.t[idx - 1] <= ti <= self.t[idx]:
+    #                 results.append(self.etas[idx](ti))
+    #             else:
+    #                 results.append(self.etas[max(0, idx - 1)](ti))
+    #
+    #         # returns vector if t was vector, scalar if t was scalar
+    #         return np.squeeze(results)
+    #     return eval
 
     @property
     def eta_t(self):
@@ -705,76 +738,33 @@ class Solution:
             return np.squeeze(results)
         return eval
 
-    # WARN: this is the one before changes
-    # @property
-    # def eta_t(self):
-    #     def eval(t):
-    #         self.eta_t_calls += 1
-    #         t = np.atleast_1d(t)
-    #         results = []
-    #         for ti in t:
-    #             idx = bisect_right(self.t, ti)
-    #             if idx == 0:
-    #                 results.append(self.etas_t[0](ti))
-    #                 continue
-    #             if ti == self.t[idx - 1]:
-    #                 k = idx - 1
-    #                 if k < len(self.etas_t):
-    #                     results.append(self.etas_t[k](ti))
-    #                 else:
-    #                     results.append(self.etas_t[-1](ti))
-    #                 continue
-    #             if idx < len(self.etas_t) and self.t[idx - 1] < ti < self.t[idx]:
-    #                 results.append(self.etas_t[idx](ti))
-    #             else:
-    #                 results.append(self.etas_t[-1](ti))
-    #         return np.squeeze(results)
-    #     return eval
-
-
-class Solver:
-
-    def __init__(self, Problem):
-        self.problem = Problem
-        self.discs = []
-        self.params = CRKParameters()
-        self.eta_calls = 0
-        self.ndim = 0
-        self.ndelays = 0
-
 
 def solve_dde(f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None):
     problem = Problem(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
     solution = Solution(problem)
     params = CRKParameters()
     t, tf = problem.t_span
-    h = (params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
-    # h = 0.1
+    # h = (params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
+    h = 0.1
     print("-" * 80)
     print("Initial h:", h)
     print("-" * 80)
 
+    first_step = OneStep(problem, solution, h)
+    status = solution.update(first_step.first_step_CRK())
+    if status != None:
+        raise ValueError(status)
+    h = first_step.h_next
+    t = solution.t[-1]
+
     while t < tf:
-        # Ensure stepsize doesn't overshoot tf
-        # h = min(h, tf - t)
-        if solution.t[-1] + h >= tf:
-            h = tf - solution.t[-1]
-
+        h = min(h, tf - t)
         onestep = OneStep(problem, solution, h)
-        success, step = onestep.one_step_CRK()
-        if step.disc != False:
-            solution.discs.append(step.disc)
+        status = solution.update(onestep.one_step_CRK())
+        print(f'eta({t}) {solution.eta(t)}')
+        if status != None:
+            raise ValueError(status)
+        h = onestep.h_next
+        t = solution.t[-1]
 
-        if success:  # Step accepted
-            t = solution.t[-1] + step.h
-            solution.t.append(t)
-            # self.steps.append(step) #WARN: useless?
-            solution.y.append(step.y[1])
-            solution.etas.append(step.eta[1])
-            solution.etas_t.append(step.eta_t[1])
-            h = onestep.h_next  # Use adjusted stepsize from rejection
-
-        else:
-            h = onestep.h_next  # Use adjusted stepsize from rejection
-            raise (f"Step rejected at t={t:.6f}, new h={h:.6e}")
     return solution
