@@ -10,6 +10,60 @@ from scipy.optimize import root
 from scipy.integrate import solve_ivp
 
 
+class RK4HHL:
+    def __init__(self):
+        self.A = np.array([
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [1/2, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1/2, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0],
+            [1/6, 1/3, 1/3, 1/6, 0, 0, 0, 0],
+            [31/162, 7/81, 7/81, 7/162, -2/27, 0, 0, 0],
+            [(37 - np.sqrt(5))/300, (7 * (1 - np.sqrt(5)))/150, (7 * (1 - np.sqrt(5))) /
+             150, (7 * (1 - np.sqrt(5)))/300, (-1 + 2 * np.sqrt(5))/100, 27/100, 0, 0],
+            [(np.sqrt(5) + 37)/300, (7 * (1 + np.sqrt(5)))/150, (7 * (1 + np.sqrt(5))) /
+             150, (7 * (1 + np.sqrt(5)))/300, -(1 + 2 * np.sqrt(5))/100, 27/100, 0, 0]
+        ], dtype=np.float64)
+
+        self.b_err = np.array(
+            [1/12, 0, 0, 0, 1/12, 0, 5/12, 5/12], dtype=np.float64)
+
+        self.b = np.array([1/6, 1/3, 1/3, 1/6], dtype=np.float64)
+
+        self.c = np.array([0, 1/2, 1/2, 1, 1, 1/3, (5 - np.sqrt(5)) /
+                           10, (5 + np.sqrt(5))/10], dtype=np.float64)
+
+        self.D = np.array([
+            [0, 1, -3/2, 2/3],
+            [0, 0, 1, -2/3],
+            [0, 0, 1, -2/3],
+            [0, 0, 1/2, -1/3],
+            [0, 0, -1, 1]
+        ], dtype=np.float64)
+
+        self.D_err = np.array([
+            [0, 1, -3, 11/3, -3/2],
+            [0, 0, -2, 16/3, -3],
+            [0, 0, -2, 16/3, -3],
+            [0, 0, -1, 8/3, -3/2],
+            [0, 0, 5/4, -7/2, 9/4],
+            [0, 0, 27/4, -27/2, 27/4]
+        ], dtype=np.float64)
+
+        self.D_ovl = np.array([
+            [0, 1, -3/2, 3/2],
+            [0, 0, 1, -3/2],
+            [0, 0, 1, -3/2],
+            [0, 0, -1/2, 2/3]
+        ], dtype=np.float64)
+
+        self.order = {"discrete_method": 4, "discrete_err_est_method": 5,
+                      "continuous_method": 4, "continous_erro_est_method": 3, "continous_ovl_method": 3}
+
+        self.n_stage = {"discrete_method": 4, "discrete_err_est_method": 8,
+                        "continuous_method": 6, "continous_erro_est_method": 5, "continous_ovl_method": 4}
+
+
 @dataclass
 class CRKParameters:
     theta1: float = 1 / 3
@@ -60,37 +114,10 @@ def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi):
     alpha = vectorize_func(alpha)
     phi = vectorize_func(phi)
 
-    # if (d_f is not None) and (d_alpha is not None) and (d_phi is not None):
-    #
-    #     df = [vectorize_func(func) for func in d_f]
-    #     d_alpha = [vectorize_func(func) for func in d_alpha]
-    #     d_phi = vectorize_func(d_phi)
-    #     return ndim, ndelays, f, alpha, phi, t_span, d_f, d_alpha, d_phi
-
-    # d_f = [None, None, None]
-    # d_alpha = [None, None]
-    # d_phi = [None, None]
-    return ndim, ndelays, f, alpha, phi, t_span  # , d_f, d_alpha, d_phi
-
-
-def real_sol(t):
-
-    if 0 <= t <= 1:
-        return -t
-    elif 1 < t <= 2:
-        return (1/2) * t**2 - t - (1/2)
-    elif 2 < t <= 3:
-        return (-1/6) * t**3 + (1/2) * t**2 - (7/6)
-    elif 3 < t <= 4:
-        return (1/24) * t**4 - (1/6) * t**3 - (1/4) * t**2 + t - (19/24)
-    elif 4 < t <= 5:
-        return (-1/120) * t**5 + (1/6) * t**4 - (5/3) * t**3 + (109/12) * t**2 - 24 * t + (2689/120)
-    else:
-        return np.nan
+    return ndim, ndelays, f, alpha, phi, t_span
 
 
 class OneStep:
-
     def __init__(self, problem, solution, h, n_stages=8):
         tn = solution.t[-1]
         yn = solution.y[-1]
@@ -264,7 +291,7 @@ class OneStep:
         d3 = ((2/3) * theta + 1) * t2
         d4 = ((2/3) * theta - 1/2) * t2
 
-        B = np.array([[d3, d1, d1, d1], [d2, d2, d2, d2],
+        B = np.array([[d1, d1, d1, d1], [d2, d2, d2, d2],
                       [d3, d3, d3, d3], [d4, d4, d4, d4]])
 
         I = np.eye(4, dtype=yn.dtype)
@@ -283,6 +310,7 @@ class OneStep:
             for i in range(4):
                 ti = tn + c[i] * h
                 yi = yn + c[i] * h * K[i-1]
+                # Y_tilde = self.eeta(alpha(ti, yi))
                 Y_tilde = self.eeta(alpha(ti, yi))
                 F[i] = K[i] - f(ti, yi, Y_tilde)
             return F
@@ -296,7 +324,7 @@ class OneStep:
 
         max_iter, iter = 30, 0
         diff_old, diff_new = 4, 3  # initializing stuff
-        while abs((norm(diff_new)**2)/(norm(diff_old) - norm(diff_new))) >= rho * TOL and iter <= max_iter:
+        while abs((np.linalg.norm(diff_new)**2)/(np.linalg.norm(diff_old) - np.linalg.norm(diff_new))) >= rho * TOL and iter <= max_iter:
             # Método de Newton usando recomposição LU
             diff_old = diff_new
 
