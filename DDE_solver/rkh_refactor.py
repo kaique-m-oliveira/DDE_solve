@@ -231,7 +231,6 @@ class RungeKutta:
 
     def _simplified_Newton(self, alpha_i):
 
-
         first_stage = self.stages_calculated
         final_stage = self.n_stages["continuous_ovl_method"]
         total_stages = final_stage - first_stage if final_stage > first_stage else 1
@@ -247,9 +246,12 @@ class RungeKutta:
         alpha_n = alpha(tn, yn)
         f_y_n = f_y(tn, yn, eta(alpha_n))
         f_x_n = f_x(tn, yn, eta(alpha_n))
+        print('f_y_n', f_y_n, 'shape', f_y_n.shape)
+        print('f_x_n', f_x_n, 'shape', f_x_n.shape)
         alpha_y_n = alpha_y(tn, yn)
         pol_order = self.D_ovl.shape[1]
 
+        # WARN: this one is mine
         sum_1 = np.sum(f_x_n * self.eeta_t(alpha_n) * alpha_y_n)
 
         # theta = np.squeeze((alpha_n - tn) / h)
@@ -271,7 +273,7 @@ class RungeKutta:
             for i in range(self.ndelays):
                 print('i', i)
                 if alpha_i[i] <= self.t[-1]:
-                    B = np.zeros(total_stages, dtype = yn.dtype)
+                    B = np.zeros(total_stages, dtype=yn.dtype)
                     print('B', B)
                 else:
                     theta_i = theta[i] ** np.arange(pol_order)
@@ -283,9 +285,21 @@ class RungeKutta:
                 sum_2 += np.kron(B, f_x_n[i])
 
         # I = np.eye(total_stages, dtype=yn.dtype)
-        I = np.eye(total_stages * self.ndim, dtype=yn.dtype)
+        # I = np.eye(total_stages * self.ndim, dtype=yn.dtype)
+        I = np.kron(np.eye(total_stages, dtype=yn.dtype),
+                    np.eye(self.ndim, dtype=yn.dtype))
 
-        J = I - h * np.kron(A, f_y_n + sum_1) - h * sum_2
+        print('I', I, 'shape', I.shape)
+        first = - h * np.kron(A, f_y_n + sum_1)
+        print('A', A, 'shape', A.shape)
+        print('f_y_n', f_y_n, 'shape', (f_y_n).shape)
+        print('sum_1', sum_1, 'shape', (sum_1).shape)
+        print('f_y_n + sum_1', f_y_n + sum_1, 'shape', (f_y_n + sum_1).shape)
+        print('first', first, 'shape', first.shape)
+
+        second = - h * sum_2
+        print('second', second, 'shape', second.shape)
+        J = I + first + second
 
         print('t0', self.t[0], 'h', self.h)
         print('K', self.K)
@@ -300,24 +314,27 @@ class RungeKutta:
                 yi = yn + c[first_stage + i] * h * K[i]
                 Y_tilde = self.eeta(alpha(ti, yi))
                 F[i] = K[i] - f(ti, yi, Y_tilde)
-            return F
+            return F.ravel()
 
         max_iter, iter = 100, 0
         err = 100
 
-        #first iteration
+        # first iteration
         inside_K = self.K[first_stage:final_stage]
         FK = F(inside_K)
-        diff_old = lu_solve((lu, piv), - FK)
+        print('FK', FK, 'shape', FK.shape)
+        # input(f'lu {lu} shape {lu.shape}')
+        diff_old = lu_solve((lu, piv), - FK).reshape(total_stages, self.ndim)
         self.K[first_stage:final_stage] += diff_old
         iter += 1
 
         inside_K = self.K[first_stage:final_stage]
         FK = F(inside_K)
-        diff_new = lu_solve((lu, piv), - FK)
+        diff_new = lu_solve((lu, piv), - FK).reshape(total_stages, self.ndim)
         self.K[first_stage:final_stage] += diff_new
         iter += 1
-        err = abs((np.linalg.norm(diff_new)**2)/(np.linalg.norm(diff_old) - np.linalg.norm(diff_new)))
+        err = abs((np.linalg.norm(diff_new)**2) /
+                  (np.linalg.norm(diff_old) - np.linalg.norm(diff_new)))
 
         while err >= rho * TOL and iter <= max_iter:
             # Método de Newton usando recomposição LU
@@ -325,19 +342,18 @@ class RungeKutta:
 
             inside_K = self.K[first_stage:final_stage]
             FK = F(inside_K)
-            diff_new = lu_solve((lu, piv), - FK)
+            diff_new = lu_solve(
+                (lu, piv), - FK).reshape(total_stages, self.ndim)
             self.K[first_stage:final_stage] += diff_new
             iter += 1
-            err = abs((np.linalg.norm(diff_new)**2)/(np.linalg.norm(diff_old) - np.linalg.norm(diff_new)))
+            err = abs((np.linalg.norm(diff_new)**2) /
+                      (np.linalg.norm(diff_old) - np.linalg.norm(diff_new)))
 
         if iter > max_iter:
             # input(f'falhou com erro {err} e {iter} iterações')
             return False
         # input(f'deu certo com erro {err} e {iter} iterações')
         return True
-
-
-
 
     def build_eta_0(self):
         f, alpha = self.problem.f,  self.problem.alpha
@@ -667,9 +683,14 @@ class Problem:
             return (f(t, y, x) - f(t - h, y, x))/h
 
         def f_y(t, y, x):
-            val = np.zeros(self.ndim, dtype=float)
+            val = np.zeros((self.ndim, self.ndim), dtype=float)
+            print('val before', val, 'shape', val.shape)
             for j in range(ndim):
-                val[j] = (f(t, y, x) - f(t, y - h*unit_vec(j), x))/h
+                val_j = (f(t, y, x) - f(t, y - h*unit_vec(j), x))/h
+                print('val_j', val_j, 'shape', val_j.shape)
+                val[j] = val_j
+            print('val', val, 'shape', val.shape)
+            # input('f_y')
             return np.atleast_1d(val)
 
         def x_add(x, h, j):
@@ -678,18 +699,25 @@ class Problem:
 
         if ndelays == 1:
             def f_x(t, y, x):
-                delays = np.empty(ndelays, dtype=y.dtype)
+                # delays = np.empty((ndelays, ndelays * ndim), dtype=y.dtype)
+                delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
+                print('delays', delays)
                 for i in range(ndelays):
-                    val = np.zeros(self.ndim, dtype=float)
+                    # val = np.zeros(self.ndim, dtype=float)
+                    val = np.zeros((self.ndim, self.ndim), dtype=float)
                     for j in range(ndim):
                         val[j] = (f(t, y, x) - f(t, y, x - h*unit_vec(j)))/h
+                    print('val', val)
                     delays[i] = np.atleast_1d(val)
                 return np.squeeze(delays)
+
         else:
             def f_x(t, y, x):
-                delays = np.empty(ndelays, dtype=y.dtype)
+                # delays = np.empty(ndelays, dtype=y.dtype)
+                delays = np.empty((ndelays, ndim), dtype=y.dtype)
                 for i in range(ndelays):
-                    val = np.zeros(self.ndim, dtype=float)
+                    # val = np.zeros(self.ndim, dtype=float)
+                    val = np.zeros((self.ndim, self.ndim), dtype=float)
                     for j in range(ndim):
                         val[j] = (f(t, y, x) - f(t, y, x_add(x, h, j)))/h
                     delays[i] = val
