@@ -273,8 +273,8 @@ class RungeKutta:
             for i in range(self.ndelays):
                 print('i', i)
                 if alpha_i[i] <= self.t[-1]:
-                    B = np.zeros(total_stages, dtype=yn.dtype)
-                    print('B', B)
+                    B = np.zeros((total_stages, total_stages), dtype=yn.dtype)
+                    print('making this mf zero')
                 else:
                     theta_i = theta[i] ** np.arange(pol_order)
                     D_ovl = self.D_ovl[first_stage:final_stage, :]
@@ -282,28 +282,32 @@ class RungeKutta:
                     print('D', D)
                     B = np.tile(D[:, None], (1, total_stages))
                     print('B', B)
-                sum_2 += np.kron(B, f_x_n[i])
+                    print('this was supposed not to be zero')
+
+                print('f_x_n[i]', f_x_n[i], 'shape', f_x_n[i].shape)
+                kron = np.kron(B, f_x_n[i])
+                print('kron', kron, 'shape', kron.shape)
+                sum_2 += kron
 
         # I = np.eye(total_stages, dtype=yn.dtype)
         # I = np.eye(total_stages * self.ndim, dtype=yn.dtype)
         I = np.kron(np.eye(total_stages, dtype=yn.dtype),
                     np.eye(self.ndim, dtype=yn.dtype))
 
-        print('I', I, 'shape', I.shape)
+        # print('I', I, 'shape', I.shape)
         first = - h * np.kron(A, f_y_n + sum_1)
-        print('A', A, 'shape', A.shape)
-        print('f_y_n', f_y_n, 'shape', (f_y_n).shape)
-        print('sum_1', sum_1, 'shape', (sum_1).shape)
-        print('f_y_n + sum_1', f_y_n + sum_1, 'shape', (f_y_n + sum_1).shape)
-        print('first', first, 'shape', first.shape)
-
+        # print('A', A, 'shape', A.shape)
+        # print('first', first, 'shape', first.shape)
+        #
         second = - h * sum_2
+        print('K', self.K)
+        print('sum_2', sum_2, 'shape', sum_2.shape)
         print('second', second, 'shape', second.shape)
         J = I + first + second
 
-        print('t0', self.t[0], 'h', self.h)
-        print('K', self.K)
-        print('J', J, 'shape', J.shape)
+        # print('t0', self.t[0], 'h', self.h)
+        # print('K', self.K)
+        # print('J', J, 'shape', J.shape)
 
         lu, piv = lu_factor(J)
 
@@ -714,7 +718,8 @@ class Problem:
         else:
             def f_x(t, y, x):
                 # delays = np.empty(ndelays, dtype=y.dtype)
-                delays = np.empty((ndelays, ndim), dtype=y.dtype)
+                # delays = np.empty((ndelays, ndim), dtype=y.dtype)
+                delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
                 for i in range(ndelays):
                     # val = np.zeros(self.ndim, dtype=float)
                     val = np.zeros((self.ndim, self.ndim), dtype=float)
@@ -745,7 +750,7 @@ class Problem:
                 return np.atleast_1d(val)
         else:
             def alpha_y(t, y):
-                delays = np.empty(self.ndelays, dtype=y.dtype)
+                delays = np.empty((self.ndelays, self.ndim), dtype=y.dtype)
                 for i in range(self.ndelays):
                     val = np.zeros(self.ndim, dtype=float)
                     for j in range(ndim):
