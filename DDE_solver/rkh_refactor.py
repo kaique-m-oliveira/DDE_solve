@@ -251,9 +251,9 @@ class RungeKutta:
             sol = my_root(d_zeta, t_guess, [
                           self.t[0], self.t[0] + self.h], method='hybr')
             sol1 = root(d_zeta, t_guess, method='hybr')
-            print('sol.x', sol.x)
-            print('sol.x', sol1.x)
-            input('see')
+            # print('sol.x', sol.x)
+            # print('sol.x', sol1.x)
+            # input('see')
             t_roots.append(sol.x)
 
         return min(t_roots)
