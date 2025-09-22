@@ -150,18 +150,19 @@ def validade_arguments(f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None
 
     alpha0 = alpha(t0, y0)
     if isinstance(alpha0, numbers.Real) or np.isscalar(alpha0):
-        ndelays = 1
+        n_state_delays = 1
     elif isinstance(alpha0, (list, np.ndarray)):
-        ndelays = len(alpha0)
+        n_state_delays = len(alpha0)
     else:
         raise TypeError(f"Unsupported type for alpha(t0, phi(t0)): {alpha0}")
 
+    n_neutral_delays = 0
     if beta is not None:
         beta0 = beta(t0, y0)
         if isinstance(beta0, numbers.Real) or np.isscalar(beta0):
-            ndelays = 1
+            n_neutral_delays = 1
         elif isinstance(beta0, (list, np.ndarray)):
-            ndelays = len(beta0)
+            n_neutral_delays = len(beta0)
         else:
             raise TypeError(f"Unsupported type for beta(t0, phi(t0)): {beta0}")
 
@@ -169,7 +170,7 @@ def validade_arguments(f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None
     alpha = vectorize_func(alpha)
     phi = vectorize_func(phi)
     beta = vectorize_func(beta)
-    return ndim, ndelays, f, alpha, phi, t_span, beta
+    return ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span, beta
 
 
 class RungeKutta:
@@ -209,7 +210,7 @@ class RungeKutta:
         self.test = False
         self.disc = False
         self.ndim = problem.ndim
-        self.ndelays = problem.ndelays
+        self.ndelays = problem.n_state_delays
         self.fails = 0
         self.stages_calculated = 0
         self.store_times = []
@@ -755,14 +756,14 @@ class RungeKutta:
         uni_local_disc_satistied = self.uni_local_error_satistied()
 
         if not uni_local_disc_satistied:
-            input(f'failed uni t = {
+            print(f'failed uni t = {
                   self.t[0] + self.h}, h = {self.h} err = {self.uni_local_error} ')
             return False
 
         local_disc_satisfied = self.disc_local_error_satistied()
 
         if not local_disc_satisfied:
-            input(f'failed disc t = {
+            print(f'failed disc t = {
                 self.t[0] + self.h}, h = {self.h}, err = {self.disc_local_error}')
             return False
 
@@ -891,10 +892,10 @@ class RK4HHL(RungeKutta):
 
 class Problem:
     def __init__(self, f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None, beta=None, neutral=False):
-        ndim, ndelays, f, alpha, phi, t_span, beta = validade_arguments(
+        ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span, beta = validade_arguments(
             f, alpha, phi, t_span, d_f = d_f, d_alpha = d_alpha, d_phi = d_phi, beta = beta, neutral = neutral)
         self.t_span = np.array(t_span)
-        self.ndim, self.ndelays, self.f, self.alpha, self.phi, self.t_span = ndim, ndelays, f, alpha, phi, t_span
+        self.ndim, self.n_state_delays, self.n_neutral_delays, self.f, self.alpha, self.phi, self.t_span = ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span
         self.beta = beta
         self.y_type = np.zeros(self.ndim, dtype=float).dtype
         self.d_alpha = self.get_delay_t(alpha)
@@ -926,7 +927,7 @@ class Problem:
         alpha = self.alpha
         f = self.f
         ndim = self.ndim
-        ndelays = self.ndelays
+        ndelays = self.n_state_delays
         d_alpha = np.empty(ndelays, dtype=self.y_type)
         h = 1e-15
 
@@ -981,7 +982,7 @@ class Problem:
         alpha = self.alpha
         f = self.f
         ndim = self.ndim
-        ndelays = self.ndelays
+        ndelays = self.n_state_delays
         d_alpha = np.empty(ndelays, dtype=self.y_type)
         h = 1e-15
 
@@ -1044,7 +1045,7 @@ class Problem:
                 # return np.squeeze(delays)
                 return delays
 
-            def f_x(t, y, x, z):
+            def f_z(t, y, x, z):
                 # delays = np.empty(ndelays, dtype=y.dtype)
                 # delays = np.empty((ndelays, ndim), dtype=y.dtype)
                 delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
@@ -1071,7 +1072,7 @@ class Problem:
         def alpha_t(t, y):
             return (alpha(t, y) - alpha(t - h, y))/h
 
-        if self.ndelays == 1:
+        if self.n_state_delays == 1:
             def alpha_y(t, y):
                 val = np.zeros(self.ndim, dtype=float)
                 for j in range(ndim):
@@ -1079,8 +1080,8 @@ class Problem:
                 return np.atleast_1d(val)
         else:
             def alpha_y(t, y):
-                delays = np.empty((self.ndelays, self.ndim), dtype=y.dtype)
-                for i in range(self.ndelays):
+                delays = np.empty((self.n_state_delays, self.ndim), dtype=y.dtype)
+                for i in range(self.n_state_delays):
                     val = np.zeros(self.ndim, dtype=float)
                     for j in range(ndim):
                         val[j] = (alpha(t, y)[i] -

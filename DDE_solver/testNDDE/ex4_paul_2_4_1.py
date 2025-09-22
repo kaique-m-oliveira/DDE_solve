@@ -1,20 +1,11 @@
-# from DDE_solver.rkh_state import *
-# from DDE_solver.rkh_step_rejection import *
-# from DDE_solver.rkh_testing import *
-# from DDE_solver.rkh import *
 import numpy as np
-# from DDE_solver.rkh_vectorize import *
-# from DDE_solver.rkh_multiple_delays import *
 from DDE_solver.rkh_refactor import *
-# from DDE_solver.rkh_refactor_before_chatgpt import *
-# from DDE_solver.rkh_state_complete import *
-# from DDE_solver.rkh_NDDE import *
 
 # WARN: STATE EXAMPLE
 
 
 def f(t, y, x, z):
-    f1 = x[0][0] + z[1][0] - z[1][1]
+    f1 = x[0][0] + z[1][0] - z[0][1]
     f2 = 2*x[0][0] + x[1][1] + z[1][0]
     return [f1, f2]
 
@@ -33,12 +24,12 @@ def alpha(t, y):
 
 def real_sol(t):
     if 0 <= t <= np.pi/2:
-        return [2 - np.cos(t), 2 - np.cos(t)]
+        return [2 - np.cos(t), 2 - 2*np.cos(t)]
     if np.pi/2 <= t <= np.pi:
-        return [2*t + 2*sin(t) - np.pi, 2*(2*t + np.cos(t) + 1 - np.pi)]
+        return [2*t + 2*np.sin(t) - np.pi, 2*(2*t + np.cos(t) + 1 - np.pi)]
 
 
-t_span = [0, 2]
+t_span = [0, np.pi]
 
 
 solver = solve_dde(f, alpha, phi, t_span, beta=alpha,
@@ -51,8 +42,6 @@ realsol = np.array([real_sol(t) for t in tt])
 sol = [solver.eta(i) for i in tt]
 print("max", np.max(np.abs(np.squeeze(sol) - np.squeeze(realsol))))
 solution = np.array([real_sol(t) for t in solver.t])
-print('solution', solution)
-print('shape solver.y', solver.y)
 print('adnaed', np.max(np.squeeze(solver.y) - np.squeeze(solution)))
 
 
