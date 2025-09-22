@@ -33,28 +33,8 @@ def alpha(t, y):
 
 t_span = [0, 2]
 
-d_f = [0, lambda t, y, x: [0, 0, 0], lambda t, y, x: [0, 0, 0]]
 
-
-def alpha_t(t, y):
-    return [1, 1]
-
-
-def alpha_y(t, y):
-    return [0, 0]
-
-
-d_alpha = [alpha_t, alpha_y]
-def d_phi(t): return 0
-
-
-# tt = np.linspace(t_span[0], t_span[1], 100)
-# realsol = np.array([real_sol(t) for t in tt])
-# plt.plot(tt, realsol, color="red", label='real solution')
-# plt.show()
-
-
-solver = solve_dde(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
+solver = solve_dde(f, alpha, phi, t_span)
 tt = np.linspace(t_span[0], t_span[1], 100)
 # realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])

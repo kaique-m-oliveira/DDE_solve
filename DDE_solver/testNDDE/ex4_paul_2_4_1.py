@@ -13,48 +13,42 @@ from DDE_solver.rkh_refactor import *
 # WARN: STATE EXAMPLE
 
 
-def f(t, y, yq):
-    return -yq
+def f(t, y, x, z):
+    f1 = x[0][0] + z[1][0] - z[1][1]
+    f2 = 2*x[0][0] + x[1][1] + z[1][0]
+    return [f1, f2]
 
 
 def phi(t):
-    return 1
+    return [np.cos(t), np.sin(t)]
+
+
+def phi_t(t):
+    return [-np.sin(t), np.cos(t)]
 
 
 def alpha(t, y):
-    return t - 1
+    return [t - np.pi/2, t - np.pi]
 
 
 def real_sol(t):
-    if 0 <= t <= 1:
-        return 1 - t
-    if 1 <= t <= 2:
-        return (1/2)*(t**2 - 4*t + 3)
-    if 2 <= t <= 3:
-        return (1/6) * (17 - 24*t + 9*t**2 - t**3)
-    return 0
+    if 0 <= t <= np.pi/2:
+        return [2 - np.cos(t), 2 - np.cos(t)]
+    if np.pi/2 <= t <= np.pi:
+        return [2*t + 2*sin(t) - np.pi, 2*(2*t + np.cos(t) + 1 - np.pi)]
 
 
-t_span = [0, 3]
+t_span = [0, 2]
 
 
-# solver = Solver(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
-solver = solve_dde(f, alpha, phi, t_span)
-
-# solver.f_y = lambda t, y, x: 0
-# solver.f_x = lambda t, y, x: -1
-# solver.alpha_t = lambda t, y: 1
-# solver.alpha_y = lambda t, y: 0
-# solver.phi_t = lambda t: 0
-# solver.etas_t.append(lambda t: 0)
+solver = solve_dde(f, alpha, phi, t_span, beta=alpha,
+                   neutral=True, d_phi=phi_t)
 
 print(f'{'='*80}')
-print('ex 1_1_1_zenaro.py')
+print('PAUL example 2.4.1')
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = [solver.eta(i) for i in tt]
-# for i in range(len(tt)):
-#     print(tt[i], realsol[i] - sol[i])
 print("max", np.max(np.abs(np.squeeze(sol) - np.squeeze(realsol))))
 solution = np.array([real_sol(t) for t in solver.t])
 print('solution', solution)

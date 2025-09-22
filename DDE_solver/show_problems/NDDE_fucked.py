@@ -89,7 +89,7 @@ def rk4(t_span, f, alpha, phi, phi_t, n):
         k4 = f(t4, y4, Y_tilde, Z_tilde)
 
         y[i + 1] = y[i] + h*(k1 + 2 * k2 + 2 * k3 + k4) / 6
-        input(f'y1 - real_sol {y[i + 1] - real_sol(t[i + 1])}')
+        # input(f'y1 - real_sol {y[i + 1] - real_sol(t[i + 1])}')
 
         t5, y5 = t[i] + h, y[i + 1]
         Y_tilde = eta_rk(alpha(t5, y5), t, y,  K1s, K5s, phi)
@@ -181,11 +181,11 @@ def real_sol_t(t):
         return -1 + 2*np.exp(t) - 2*(t+2)*np.exp(t - 1)
 
 
-epsilon = 0.01
+epsilon = 1
 t_span = [1 - epsilon, 2]
 
 
-h = 0.03
+h = 0.0001
 n = int((t_span[-1] - t_span[0])/h)
 ts, y_rk = rk4(t_span, f, alpha, phi, phi_t, n)
 t_mid, y_mid = mid_point(t_span, f, alpha, phi, phi_t, n)

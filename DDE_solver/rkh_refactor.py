@@ -9,22 +9,30 @@ from scipy.optimize import root
 from scipy.integrate import solve_ivp
 
 
+# def real_sol(t):
+#     if t <= 0:
+#         return -t
+#     if 0 <= t <= 1:
+#         return -2 + t + 2*np.exp(t)
+#     elif 1 <= t <= 2:
+#         return 4 - t + 2*np.exp(t) - 2*(t + 1)*np.exp(t - 1)
+#
+#
+# def real_sol_t(t):
+#     if t <= 0:
+#         return -1
+#     if 0 <= t <= 1:
+#         return 1 + 2*np.exp(t)
+#     if 1 <= t <= 2:
+#         return -1 + 2*np.exp(t) - 2*(t+2)*np.exp(t - 1)
+
+
 def real_sol(t):
-    if t <= 0:
-        return -t
-    if 0 <= t <= 1:
-        return -2 + t + 2*np.exp(t)
-    elif 1 <= t <= 2:
-        return 4 - t + 2*np.exp(t) - 2*(t + 1)*np.exp(t - 1)
+    return np.log(t)
 
 
 def real_sol_t(t):
-    if t <= 0:
-        return -1
-    if 0 <= t <= 1:
-        return 1 + 2*np.exp(t)
-    if 1 <= t <= 2:
-        return -1 + 2*np.exp(t) - 2*(t+2)*np.exp(t - 1)
+    return 1/t
 
 
 def lu_factor(A):
@@ -128,7 +136,7 @@ def vectorize_func(func):
     return wrapper
 
 
-def validade_arguments(f, alpha, phi, t_span, d_f, d_alpha, d_phi, beta):
+def validade_arguments(f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None, beta=None, neutral=None):
     t0, tf = map(float, t_span)
     t_span = [t0, tf]
     y0 = phi(t0)
@@ -193,6 +201,7 @@ class RungeKutta:
         self.eta_t = solution.eta_t
         self.new_eta = [None, None]
         self.new_eta_t = [None, None]
+        self.new_eta_tt = None
         self.disc_local_error = None
         self.uni_local_error = None
         self.params = CRKParameters()
@@ -234,8 +243,29 @@ class RungeKutta:
             for i in range(len(t)):
                 if t[i] <= self.t[0]:
                     results[i] = self.solution.eta_t(t[i])
+
                 else:
-                    results[i] = self._hat_eta_0_t(t[i])
+                    if self.new_eta[1] is not None:
+                        results[i] = self.new_eta_t[1](t[i])
+                    elif self.new_eta[0] is not None:
+                        results[i] = self.new_eta_t[0](t[i])
+                    else:
+                        results[i] = self._hat_eta_0_t(t[i])
+                # else:
+                #     results[i] = self._hat_eta_0_t(t[i])
+            return np.squeeze(results)
+        return eval
+
+    @property
+    def eeta_tt(self):
+        def eval(t):
+            t = np.atleast_1d(t)  # accept scalar or array
+            results = np.empty((len(t), self.problem.ndim), dtype=float)
+            for i in range(len(t)):
+                if t[i] <= self.t[0]:
+                    results[i] = self.solution.eta_tt(t[i])
+                else:
+                    results[i] = self._hat_eta_0_tt(t[i])
             return np.squeeze(results)
         return eval
 
@@ -287,6 +317,8 @@ class RungeKutta:
         return min(t_roots)
 
     def one_step_RK4(self):
+        # print('SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS')
+        # print('SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS')
         tn, h, yn = self.t[0], self.h, self.y[0]
 
         f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
@@ -307,13 +339,13 @@ class RungeKutta:
             if np.all(alpha(ti, yi) <= np.full(self.ndelays, tn)):
                 alpha_i = alpha(ti, yi)
                 Y_tilde = eta(alpha_i)
-                print('eta(alpha_i)', Y_tilde,
-                      'real_sol(alpha_i)', real_sol(alpha_i), 'diff', abs(Y_tilde - real_sol(alpha_i)))
+                # print('eta(alpha_i)', Y_tilde,
+                #       'real_sol(alpha_i)', real_sol(alpha_i), 'diff', abs(Y_tilde - real_sol(alpha_i)))
                 if self.neutral:
                     beta_i = self.problem.beta(ti, yi)
                     Z_tilde = self.eta_t(alpha_i)
-                    print('---eta_t(alpha_i)', Z_tilde,
-                          'real_sol_t(alpha_i)', real_sol_t(alpha_i), 'diff', abs(Z_tilde - real_sol_t(alpha_i)))
+                    # print('---eta_t(alpha_i)', Z_tilde,
+                    #       'real_sol_t(alpha_i)', real_sol_t(alpha_i), 'diff', abs(Z_tilde - real_sol_t(alpha_i)))
                     self.K[i] = f(ti, yi, Y_tilde, Z_tilde)
                 else:
                     self.K[i] = f(ti, yi, Y_tilde)
@@ -328,19 +360,17 @@ class RungeKutta:
         self.y[1] = yn + h * (self.b @ self.K[0:n_stages])
         self.stages_calculated = n_stages
 
-        print(f'tn = {tn}, h = {
-              h}, yn+1 = {self.y[1]}, yn.shape {self.y[1].shape} ')
-        print(f'yn+1 = {self.y[1]} real_sol = {real_sol(tn + h)
-                                               } diff={abs(self.y[1] - real_sol(tn + h))}')
-
-        print('__________________________________________________________')
-        input('RK4 stuff')
-        # print(
-        #     f'tn+1 = {tn + h}, yn+1 = {self.y[1]} real_sol {real_sol(tn + h)}')
-        # print(f' ERROR {self.y[1] - real_sol(tn + h)}')
+        # print(f'tn = {tn}, h = {
+        #       h}, yn+1 = {self.y[1]}, yn.shape {self.y[1].shape} ')
+        # print(f'yn+1 = {self.y[1]} real_sol = {real_sol(tn + h)} diff={abs(self.y[1] - real_sol(tn + h))}')
+        # print('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF')
+        # print('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF')
+        # input('RK4 stuff')
         return True
 
     def _simplified_Newton(self, alpha_i):
+        # print('[[[[[[[[[[[[[[[[[[[[[[[[[ BEGINNING NEWTON ]]]]]]]]]]]]]]]]]]]]]]]]]')
+        # print('t', self.t[0])
 
         first_stage = self.stages_calculated
         final_stage = self.n_stages["continuous_ovl_method"]
@@ -349,76 +379,82 @@ class RungeKutta:
         A = self.A[first_stage:final_stage, first_stage:final_stage]
         c = self.c
         rho, TOL = self.params.rho, self.params.TOL
-        f_t, f_y, f_x = self.problem.d_f
-        eta_t = self.solution.eta_t
+
         alpha_t, alpha_y = self.problem.d_alpha
+
+        if self.neutral:
+            f_t, f_y, f_x, f_z = self.problem.d_f
+            beta_t, beta_y = self.problem.d_beta
+        else:
+            f_t, f_y, f_x = self.problem.d_f
+
+        eta_t = self.solution.eta_t
+        eta_tt = self.solution.eta_tt
+
         tn, h, yn = self.t[0], self.h, self.y[0]
-        f, eta, alpha = self.problem.f, self.eta, self.problem.alpha
+        f, eta = self.problem.f, self.eta
+        alpha, beta = self.problem.alpha, self.problem.alpha
+
         alpha_n = alpha(tn, yn)
-        f_y_n = f_y(tn, yn, eta(alpha_n))
-        f_x_n = f_x(tn, yn, eta(alpha_n))
-        # print('f_y_n', f_y_n, 'shape', f_y_n.shape)
-        # print('f_x_n', f_x_n, 'shape', f_x_n.shape)
         alpha_y_n = alpha_y(tn, yn)
+
+        if self.neutral:
+            beta_n = beta(tn, yn)
+            f_y_n = f_y(tn, yn, eta(alpha_n), eta_t(beta_n))
+            f_x_n = f_x(tn, yn, eta(alpha_n), eta_t(beta_n))
+            f_z_n = f_z(tn, yn, eta(alpha_n), eta_t(beta_n))
+            beta_y_n = beta_y(tn, yn)
+
+        else:
+            f_y_n = f_y(tn, yn, eta(alpha_n))
+            f_x_n = f_x(tn, yn, eta(alpha_n))
+
         pol_order = self.D_ovl.shape[1]
 
         # WARN: this one is mine
         sum_1 = np.sum(f_x_n * self.eeta_t(alpha_n) * alpha_y_n)
 
-        # theta = np.squeeze((alpha_n - tn) / h)
-        theta = np.squeeze((alpha_i - tn) / h)
-        if self.ndelays == 1:
-            theta = theta ** np.arange(pol_order)
-            # print('first_stage', first_stage)
-            # print('final_stage', final_stage)
-            D_ovl = self.D_ovl[first_stage:final_stage, :]
-            D = D_ovl @ theta
-            B = np.tile(D[:, None], (1, total_stages))
-            print('B', B)
-            sum_2 = np.kron(B, f_x_n)
+        sum_1t = 0
+        if self.neutral:
+            sum_1t = np.sum(f_z_n * self.eeta_tt(beta_n) * beta_y_n)
 
-        else:
-            sum_2 = 0
-            print('t0', self.t[0])
-            print('alpha_n', alpha_n)
-            for i in range(self.ndelays):
-                print('i', i)
-                if alpha_i[i] <= self.t[-1]:
-                    B = np.zeros((total_stages, total_stages), dtype=yn.dtype)
-                    print('making this mf zero')
+        theta = np.squeeze((alpha_i - tn) / h)
+
+        sum_2 = 0
+        for i in range(self.ndelays):
+            if alpha_i[i] <= self.t[-1]:
+                B = np.zeros((total_stages, total_stages), dtype=yn.dtype)
+
+            else:
+                theta_i = theta[i] ** np.arange(pol_order)
+                D_ovl = self.D_ovl[first_stage:final_stage, :]
+                D = D_ovl @ theta_i
+                B = np.tile(D[:, None], (1, total_stages))
+
+            kron = np.kron(B, f_x_n[i])
+
+            # WARN: HAVEN'T DECIDED WHETHER TO USE THETA_I OR THETA_N
+            kron_t = 0
+            if self.neutral:
+                if beta_n[i] <= self.t[-1]:
+                    B_t = np.zeros(
+                        (total_stages, total_stages), dtype=yn.dtype)
                 else:
-                    theta_i = theta[i] ** np.arange(pol_order)
+                    theta = np.array([n*theta**(n-1)
+                                     for n in range(pol_order)])
                     D_ovl = self.D_ovl[first_stage:final_stage, :]
                     D = D_ovl @ theta_i
-                    print('D', D)
-                    B = np.tile(D[:, None], (1, total_stages))
-                    print('B', B)
-                    print('this was supposed not to be zero')
+                    B_t = np.tile(D[:, None], (1, total_stages))
+                kron_t = np.kron(B_t, f_x_n[i])
 
-                print('f_x_n[i]', f_x_n[i], 'shape', f_x_n[i].shape)
-                kron = np.kron(B, f_x_n[i])
-                print('kron', kron, 'shape', kron.shape)
-                sum_2 += kron
+            sum_2 += kron + kron_t
 
-        # I = np.eye(total_stages, dtype=yn.dtype)
-        # I = np.eye(total_stages * self.ndim, dtype=yn.dtype)
         I = np.kron(np.eye(total_stages, dtype=yn.dtype),
                     np.eye(self.ndim, dtype=yn.dtype))
 
-        # print('I', I, 'shape', I.shape)
-        first = - h * np.kron(A, f_y_n + sum_1)
-        # print('A', A, 'shape', A.shape)
-        # print('first', first, 'shape', first.shape)
-        #
+        first = - h * np.kron(A, f_y_n + sum_1 + sum_1t)
         second = - h * sum_2
-        print('K', self.K)
-        print('sum_2', sum_2, 'shape', sum_2.shape)
-        print('second', second, 'shape', second.shape)
         J = I + first + second
-
-        # print('t0', self.t[0], 'h', self.h)
-        # print('K', self.K)
-        # print('J', J, 'shape', J.shape)
 
         lu, piv = lu_factor(J)
 
@@ -427,26 +463,42 @@ class RungeKutta:
             for i in range(total_stages):
                 ti = tn + c[first_stage + i] * h
                 yi = yn + c[first_stage + i] * h * K[i]
+
                 Y_tilde = self.eeta(alpha(ti, yi))
-                F[i] = K[i] - f(ti, yi, Y_tilde)
+                if self.neutral:
+                    Z_tilde = self.eeta_t(beta(ti, yi))
+                    # print('_____________F______________')
+                    # print('beta_i', beta(ti, yi))
+                    # print('z', Z_tilde, 'real_t', real_sol_t(beta(ti, yi)))
+                    # print('f in z', f(ti, yi, Y_tilde, Z_tilde))
+                    F[i] = K[i] - f(ti, yi, Y_tilde, Z_tilde)
+                else:
+                    F[i] = K[i] - f(ti, yi, Y_tilde)
             return F.ravel()
 
-        max_iter, iter = 100, 0
+        max_iter, iter = 130, 0
         err = 100
 
         # first iteration
-        inside_K = self.K[first_stage:final_stage]
-        FK = F(inside_K)
-        print('FK', FK, 'shape', FK.shape)
-        # input(f'lu {lu} shape {lu.shape}')
+        first_guess = np.full(self.K[first_stage:final_stage].shape, self.K[0])
+        # print(self.K[first_stage:final_stage].shape)
+        self.K[first_stage:final_stage] = first_guess
+        # print('stages to calculate:', total_stages)
+        # print('K0', self.K[0])
+        # print('self.K', self.K)
+        # print('first_guess', first_guess)
+        FK = F(first_guess)
+
         diff_old = lu_solve((lu, piv), - FK).reshape(total_stages, self.ndim)
         self.K[first_stage:final_stage] += diff_old
+        # print('K', self.K[first_stage:final_stage])
         iter += 1
 
         inside_K = self.K[first_stage:final_stage]
         FK = F(inside_K)
         diff_new = lu_solve((lu, piv), - FK).reshape(total_stages, self.ndim)
         self.K[first_stage:final_stage] += diff_new
+        # print('K', self.K[first_stage:final_stage])
         iter += 1
         err = abs((np.linalg.norm(diff_new)**2) /
                   (np.linalg.norm(diff_old) - np.linalg.norm(diff_new)))
@@ -460,12 +512,24 @@ class RungeKutta:
             diff_new = lu_solve(
                 (lu, piv), - FK).reshape(total_stages, self.ndim)
             self.K[first_stage:final_stage] += diff_new
+            # print('K', self.K[first_stage:final_stage])
             iter += 1
             err = abs((np.linalg.norm(diff_new)**2) /
                       (np.linalg.norm(diff_old) - np.linalg.norm(diff_new)))
 
+        # print('Ks', self.K)
+        # print('final K', self.K[first_stage:final_stage])
+        # input('[[[[[[[[[[[[[[[[[[[[[[[[[ ENDING NEWTON ]]]]]]]]]]]]]]]]]]]]]]]]]')
         if iter > max_iter:
-            # input(f'falhou com erro {err} e {iter} iterações')
+
+            # print('err', err)
+            # print('TOL', TOL, 'rho', rho, rho*TOL)
+            y1 = yn + h * (self.b @ self.K[0:4])
+            # print(f'tn = {tn}, h = {
+            #       h}, yn+1 = {y1}, yn.shape {y1.shape} ')
+            # print(f'yn+1 = {y1} real_sol = {real_sol(tn + h)
+            #                                        } diff={y1 - real_sol(tn + h)}')
+            # input(f'{'A'*400} ')
             return False
         # input(f'deu certo com erro {err} e {iter} iterações')
         return True
@@ -500,6 +564,17 @@ class RungeKutta:
 
         return eta0
 
+
+    def _eta_0_t(self, theta):
+        tn, h, yn = self.t[0], self.h, self.y[0]
+        theta = (theta - tn) / h
+        pol_order = self.D_err.shape[1]
+        theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+        K = self.K[0:self.n_stages["continuous_err_est_method"]]
+        bs = (self.D @ theta).squeeze()
+        eta0 = bs @ K
+        return eta0
+
     def _hat_eta_0(self, theta):
 
         tn, h, yn = self.t[0], self.h, self.y[0]
@@ -513,10 +588,29 @@ class RungeKutta:
         return eta0
 
     def _hat_eta_0_t(self, theta):
+        # print('------------------inside hat_t ------------------------')
+        realval_t = real_sol_t(theta)
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
         pol_order = self.D_ovl.shape[1]
         theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+        K = self.K[0:self.n_stages["continuous_ovl_method"]]
+        # print('K', K)
+        # print('theta', theta)
+        bs = (self.D_ovl @ theta).squeeze()
+        # print('D@theta', self.D_ovl@theta)
+        # print('bs', bs)
+        # eta0 = yn + h * bs @ K
+        eta0 = bs @ K
+        # print('hat0', eta0, 'real', realval_t, 'diff', abs(realval_t - eta0))
+        # print('---------------------------------------------------------')
+        return eta0
+
+    def _hat_eta_0_tt(self, theta):
+        tn, h, yn = self.t[0], self.h, self.y[0]
+        theta = (theta - tn) / h
+        pol_order = self.D_ovl.shape[1]
+        theta = np.array([n*(n-1)*theta**(n-2) for n in range(pol_order)])
         K = self.K[0:self.n_stages["continuous_ovl_method"]]
         bs = (self.D_ovl @ theta).squeeze()
         # eta0 = yn + h * bs @ K
@@ -562,34 +656,15 @@ class RungeKutta:
         eta0 = bs @ K
         return eta0
 
-    # def _eta_1_t(self, t):
-    #     tn, h = self.t[0], self.h
-    #     theta = (t - tn) / h
-    #
-    #     # derivatives d_i'(theta) for theta1 = 1/3 (exact)
-    #     d1p = 36.0*theta**3 - 48.0*theta**2 + 12.0*theta
-    #     d2p = -36.0*theta**3 + 48.0*theta**2 - 12.0*theta
-    #     d3p = 3.0*theta**2 - 4.0*theta + 1.0
-    #     d4p = 9.0*theta**3 - 10.5*theta**2 + 2.5*theta
-    #     d5p = 27.0*theta**3 - 40.5*theta**2 + 13.5*theta
-    #
-    #     # sanity checks (fail early if user hasn't computed y_{n+1} or K stages)
-    #     assert h != 0.0, "step size h is zero"
-    #     assert len(self.y) > 1, "self.y[1] (y_{n+1}) missing"
-    #     # ensure K has at least 6 stages (indices 0..5)
-    #     assert self.K.shape[0] >= 6, f"K has {self.K.shape[0]} rows; need >= 6"
-    #
-    #     y_n = np.atleast_1d(self.y[0])
-    #     y_np1 = np.atleast_1d(self.y[1])
-    #     K1 = np.atleast_1d(self.K[0])   # K_{n+1}^1
-    #     K5 = np.atleast_1d(self.K[4])   # K_{n+1}^5
-    #     K6 = np.atleast_1d(self.K[5])   # K_{n+1}^6
-    #
-    #     # compute eta'(t)
-    #     term_y = (d1p * y_n + d2p * y_np1) / h   # shape (ndim,)
-    #     term_K = d3p * K1 + d4p * K5 + d5p * K6  # shape (ndim,)
-    #
-    #     return term_y + term_K
+    def _eta_1_tt(self, theta):
+        tn, h, yn = self.t[0], self.h, self.y[0]
+        theta = (theta - tn) / h
+        pol_order = self.D.shape[1]
+        theta = np.array([n*(n-1)*theta**(n-2) for n in range(pol_order)])
+        K = self.K[0:self.n_stages["continuous_method"]]
+        bs = (self.D @ theta).squeeze()
+        eta0 = bs @ K
+        return eta0
 
     def error_est_method(self):
         f, alpha = self.problem.f,  self.problem.alpha
@@ -638,8 +713,17 @@ class RungeKutta:
     def uni_local_error_satistied(self):
 
         tn, h = self.t[0], self.h
-        self.uni_local_error = (
-            h * np.linalg.norm(self.new_eta[0](tn + (1/2) * h) - self.new_eta[1](tn + (1/2)*h)))
+        val1 = self.new_eta[0](tn + h/2)
+        val2 = self.new_eta[1](tn + h/2)
+        # print('______________________________________________________________')
+        # print('tn + h/2', tn + h/2)
+        # print('val1', val1, 'val2', val2)
+        # for i in range(1, 10):
+        #     print(f't = {tn + (1/i)*h} eta_0 = {self.new_eta[0](tn + (1/i)*h)}')
+        # input('bro')
+
+
+        self.uni_local_error = h * np.linalg.norm(val1 - val2)
         # eq 7.3.4
 
         if self.uni_local_error <= self.params.TOL:
@@ -658,26 +742,28 @@ class RungeKutta:
         success = self.one_step_RK4()
         if not success:
             self.h = self.h/2
+            self.h_next = self.h
             return False
 
         self.build_eta_1()
         self.new_eta[1] = self._eta_1
         self.build_eta_0()
         self.new_eta[0] = self._eta_0
-        self.new_eta_t = [self._eta_1_t, self._eta_1_t]
+        self.new_eta_t = [self._eta_0_t, self._eta_1_t]
+        self.new_eta_tt = self._eta_1_tt
         self.error_est_method()
         uni_local_disc_satistied = self.uni_local_error_satistied()
 
         if not uni_local_disc_satistied:
-            print(f'failed uniform step at t = {
-                  self.t[0] + self.h} with h = {self.h}')
+            input(f'failed uni t = {
+                  self.t[0] + self.h}, h = {self.h} err = {self.uni_local_error} ')
             return False
 
         local_disc_satisfied = self.disc_local_error_satistied()
 
         if not local_disc_satisfied:
-            print(f'failed discrete step at t = {
-                  self.t[0] + self.h} with h = {self.h}')
+            input(f'failed disc t = {
+                self.t[0] + self.h}, h = {self.h}, err = {self.disc_local_error}')
             return False
 
         # print(f'successfull step with h = {self.h}')
@@ -804,22 +890,31 @@ class RK4HHL(RungeKutta):
 
 
 class Problem:
-    def __init__(self, f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None, beta=None):
+    def __init__(self, f, alpha, phi, t_span, d_f=None, d_alpha=None, d_phi=None, beta=None, neutral=False):
         ndim, ndelays, f, alpha, phi, t_span, beta = validade_arguments(
-            f, alpha, phi, t_span, d_f, d_alpha, d_phi, beta)
+            f, alpha, phi, t_span, d_f = d_f, d_alpha = d_alpha, d_phi = d_phi, beta = beta, neutral = neutral)
         self.t_span = np.array(t_span)
         self.ndim, self.ndelays, self.f, self.alpha, self.phi, self.t_span = ndim, ndelays, f, alpha, phi, t_span
         self.beta = beta
         self.y_type = np.zeros(self.ndim, dtype=float).dtype
-        self.d_alpha = self.get_d_alpha()
-        self.d_f = self.get_d_f()
+        self.d_alpha = self.get_delay_t(alpha)
+        self.d_phi_t = None
+
+        if beta is not None:
+            self.d_beta = self.get_delay_t(beta)
+
         if d_phi is not None:
             self.d_phi = d_phi
         else:
-            self.d_phi = self.get_d_phi()
+            self.d_phi = self.get_d_phi(phi)
 
-    def get_d_phi(self):
-        phi = self.phi
+        if neutral:
+            self.d_f = self.get_d_f_neutral()
+            self.d_phi_t = self.get_d_phi(self.d_phi)
+        else:
+            self.d_f = self.get_d_f()
+
+    def get_d_phi(self, phi):
         h = 1e-15
 
         def d_phi(t):
@@ -863,7 +958,8 @@ class Problem:
                     for j in range(ndim):
                         val[j] = (f(t, y, x) - f(t, y, x - h*unit_vec(j)))/h
                     delays[i] = np.atleast_1d(val)
-                return np.squeeze(delays)
+                # return np.squeeze(delays)
+                return delays
 
         else:
             def f_x(t, y, x):
@@ -876,12 +972,95 @@ class Problem:
                     for j in range(ndim):
                         val[j] = (f(t, y, x) - f(t, y, x_add(x, h, j)))/h
                     delays[i] = val
-                return np.squeeze(delays)
+                # return np.squeeze(delays)
+                return delays
 
         return f_t, f_y, f_x
 
-    def get_d_alpha(self):
+    def get_d_f_neutral(self):
         alpha = self.alpha
+        f = self.f
+        ndim = self.ndim
+        ndelays = self.ndelays
+        d_alpha = np.empty(ndelays, dtype=self.y_type)
+        h = 1e-15
+
+        def unit_vec(j): return np.array(
+            [1 if i == j else 0 for i in range(ndim)])
+
+        def f_t(t, y, x, z):
+            return (f(t, y, x, z) - f(t - h, y, x, z))/h
+
+        def f_y(t, y, x, z):
+            val = np.zeros((self.ndim, self.ndim), dtype=float)
+            for j in range(ndim):
+                val_j = (f(t, y, x, z) - f(t, y - h*unit_vec(j), x, z))/h
+                val[j] = val_j
+            # input('f_y')
+            return np.atleast_1d(val)
+
+        def x_add(x, h, j):
+            x[j] -= h
+            return x
+
+        if ndelays == 1:
+            def f_x(t, y, x, z):
+                # delays = np.empty((ndelays, ndelays * ndim), dtype=y.dtype)
+                delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
+                for i in range(ndelays):
+                    # val = np.zeros(self.ndim, dtype=float)
+                    val = np.zeros((self.ndim, self.ndim), dtype=float)
+                    for j in range(ndim):
+                        val[j] = (f(t, y, x, z) -
+                                  f(t, y, x - h*unit_vec(j), z))/h
+                    delays[i] = np.atleast_1d(val)
+                # return np.squeeze(delays)
+                return delays
+
+            def f_z(t, y, x, z):
+                # delays = np.empty((ndelays, ndelays * ndim), dtype=y.dtype)
+                delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
+                for i in range(ndelays):
+                    # val = np.zeros(self.ndim, dtype=float)
+                    val = np.zeros((self.ndim, self.ndim), dtype=float)
+                    for j in range(ndim):
+                        val[j] = (f(t, y, x, z) -
+                                  f(t, y, x, z - h*unit_vec(j)))/h
+                    delays[i] = np.atleast_1d(val)
+                # return np.squeeze(delays)
+                return delays
+
+        else:
+            def f_x(t, y, x, z):
+                # delays = np.empty(ndelays, dtype=y.dtype)
+                # delays = np.empty((ndelays, ndim), dtype=y.dtype)
+                delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
+                for i in range(ndelays):
+                    # val = np.zeros(self.ndim, dtype=float)
+                    val = np.zeros((self.ndim, self.ndim), dtype=float)
+                    for j in range(ndim):
+                        val[j] = (f(t, y, x, z) - f(t, y, x_add(x, h, j), z))/h
+                    delays[i] = val
+                # return np.squeeze(delays)
+                return delays
+
+            def f_x(t, y, x, z):
+                # delays = np.empty(ndelays, dtype=y.dtype)
+                # delays = np.empty((ndelays, ndim), dtype=y.dtype)
+                delays = np.zeros((ndelays, ndim, ndim), dtype=y.dtype)
+                for i in range(ndelays):
+                    # val = np.zeros(self.ndim, dtype=float)
+                    val = np.zeros((self.ndim, self.ndim), dtype=float)
+                    for j in range(ndim):
+                        val[j] = (f(t, y, x, z) - f(t, y, x, x_add(z, h, j)))/h
+                    delays[i] = val
+                # return np.squeeze(delays)
+                return delays
+
+        return f_t, f_y, f_x, f_z
+
+    def get_delay_t(self, alpha):
+        # alpha = self.alpha
         ndim = self.ndim
         d_alpha = [None, None]
         h = 1e-15
@@ -919,6 +1098,7 @@ class Solution:
         self.y = [np.atleast_1d(problem.phi(problem.t_span[0]))]
         self.etas = [problem.phi]
         self.etas_t = [problem.d_phi]
+        self.etas_tt = [problem.d_phi_t]
         self.discs = [problem.t_span[0]]
         self.eta_calls = 0
         self.eta_t_calls = 0
@@ -958,18 +1138,35 @@ class Solution:
             return np.squeeze(results)
         return eval
 
+    @property
+    def eta_tt(self):
+        def eval(t):
+            self.eta_calls += 1
+            t = np.atleast_1d(t)  # accept scalar or array
+            results = np.empty((len(t), self.problem.ndim), dtype=float)
+            for i in range(len(t)):
+                idx = bisect_left(self.t, t[i])
+                if t[i] <= self.t[-1]:
+                    results[i] = self.etas_tt[idx](t[i])
+                else:
+                    raise ValueError(
+                        f"eta isn't defined in {t[i]}, only on {self.t[0], self.t[-1]}")
+            return np.squeeze(results)
+        return eval
+
     def update(self, onestep):
         success, step = onestep
         if step.disc != False:
             self.discs.append(step.disc)
 
         if success:  # Step accepted
-            if (self.t[-1] + step.h != step.t[1]):
-                print('sum', self.t[-1] + step.h, 't1', step.t[1])
+            # if (self.t[-1] + step.h != step.t[1]):
+                # print('sum', self.t[-1] + step.h, 't1', step.t[1])
             self.t.append(step.t[0] + step.h)
             self.y.append(step.y[1])
             self.etas.append(step.new_eta[1])
             self.etas_t.append(step.new_eta_t[1])
+            self.etas_tt.append(step.new_eta_tt)
             # h = step.h_next  # Use adjusted stepsize from rejection
             return None
 
@@ -979,7 +1176,8 @@ class Solution:
 
 
 def solve_dde(f, alpha, phi, t_span, neutral=False, beta=None, d_f=None, d_alpha=None, d_phi=None):
-    problem = Problem(f, alpha, phi, t_span, d_f, d_alpha, d_phi, beta)
+    problem = Problem(f, alpha, phi, t_span, d_f = d_f, d_alpha = d_alpha,
+                      d_phi = d_phi, beta = beta, neutral=neutral)
     solution = Solution(problem)
     params = CRKParameters()
     t, tf = problem.t_span
@@ -1003,16 +1201,9 @@ def solve_dde(f, alpha, phi, t_span, neutral=False, beta=None, d_f=None, d_alpha
         onestep = RK4HHL(problem, solution, h, neutral)
         status = solution.update(onestep.one_step_CRK())
         calls += onestep.number_of_calls
-        # if onestep.store_times != []:
-        #     times.extend(onestep.store_times)
-        # print(f'eta({t}) {solution.eta(t)}')
         if status != None:
             raise ValueError(status)
         h = onestep.h_next
         t = solution.t[-1]
 
-    # print('real calls', calls)
-    # print('total sum', sum(times))
-    # print('total accesses', len(times))
-    # print(f'final avg time {sum(times)/len(times)}')
     return solution

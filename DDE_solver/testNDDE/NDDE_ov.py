@@ -1,22 +1,18 @@
-# from DDE_solver.rkh_state import *
-# from DDE_solver.rkh_step_rejection import *
-# from DDE_solver.rkh_testing import *
-# from DDE_solver.rkh import *
 import numpy as np
-# from DDE_solver.rkh_ovl_simp_newton import *
-# from DDE_solver.rkh_fast_ov_test_disc import *
-from DDE_solver.rkh_NDDE import *
-# from DDE_solver.rkh_NDDE import *
-
-# WARN: STATE EXAMPLE
+from DDE_solver.rkh_refactor import *
 
 
-def f(t, y, yq, yz):
-    return 1 - np.log(1/yz)
+def f(t, y, x, z):
+    # print('z', z, '1/z', 1/z)
+    return 1 - np.log(1/z)
 
 
 def phi(t):
     return np.log(t)
+
+
+def phi_t(t):
+    return 1/t
 
 
 def alpha(t, y):
@@ -27,29 +23,28 @@ def real_sol(t):
     return np.log(t)
 
 
-t_span = [0.5, 5]
-
-solver = Solver(f, alpha, phi, t_span)
-solver.f_y = lambda t, y, x: 0
-solver.f_x = lambda t, y, x: -1
-solver.f_z = lambda t, y, x: 1/t
-solver.alpha_t = lambda t, y: (e**(1 - 1 / t)) / t**2
-solver.alpha_y = lambda t, y: 0
-solver.phi_t = lambda t: 1 / t
-solver.etas_t.append(lambda t: 1 / t)
+def real_sol_t(t):
+    return 1/t
 
 
-solver.solve_dde()
+t_span = [0.5, 2]
+
+solver = solve_dde(f, alpha, phi, t_span, beta=alpha,
+                   neutral=True, d_phi=phi_t)
+
+
+print(f'{'='*80}')
+print('PAUL example 2.2.1')
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
-sol = np.array([solver.eta(i) for i in tt])
-# for i in range(len(tt)):
-#     print(tt[i], realsol[i] - sol[i])
-print("max", max(abs(sol - realsol)))
+sol = [solver.eta(i) for i in tt]
+print("max", np.max(np.abs(np.squeeze(sol) - np.squeeze(realsol))))
 solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', max(solver.y - solution))
+print('adnaed', np.max(np.squeeze(solver.y) - np.squeeze(solution)))
 
 
+print('sol', len(sol))
+print('realsol', len(realsol))
 plt.plot(tt, realsol, color="red", label='real solution')
 plt.plot(tt, sol, color="blue", label='aproxx')
 plt.legend()

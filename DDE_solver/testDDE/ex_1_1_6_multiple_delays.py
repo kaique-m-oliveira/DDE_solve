@@ -52,19 +52,19 @@ def real_sol(t):
 
 t_span = [0, 10]
 
-d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
-
-
-def alpha_t(t, y):
-    return [1, 1, 1, 1]
-
-
-def alpha_y(t, y):
-    return [0, 0, 0, 0]
-
-
-d_alpha = [alpha_t, alpha_y]
-def d_phi(t): return 0
+# d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
+#
+#
+# def alpha_t(t, y):
+#     return [1, 1, 1, 1]
+#
+#
+# def alpha_y(t, y):
+#     return [0, 0, 0, 0]
+#
+#
+# d_alpha = [alpha_t, alpha_y]
+# def d_phi(t): return 0
 
 
 # tt = np.linspace(t_span[0], t_span[1], 100)
@@ -73,7 +73,7 @@ def d_phi(t): return 0
 # plt.show()
 
 
-solver = solve_dde(f, alpha, phi, t_span, d_f, d_alpha, d_phi)
+solver = solve_dde(f, alpha, phi, t_span)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])

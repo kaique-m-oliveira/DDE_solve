@@ -32,24 +32,23 @@ def real_sol(t):
 
 
 t_span = [0.5, 5]
-def f_t(t): return 0
-def f_y(t, y, x): return 0
-def f_x(t, y, x): return -1
-
-
-d_f = [f_t, f_y, f_x]
-def alpha_t(t, y): return (np.e**(1 - 1 / t)) / t**2
-def alpha_y(t, y): return 0
-
-
-d_alpha = [alpha_t, alpha_y]
-def d_phi(t): return 1 / t
+# def f_t(t): return 0
+# def f_y(t, y, x): return 0
+# def f_x(t, y, x): return -1
+#
+#
+# d_f = [f_t, f_y, f_x]
+# def alpha_t(t, y): return (np.e**(1 - 1 / t)) / t**2
+# def alpha_y(t, y): return 0
+#
+#
+# d_alpha = [alpha_t, alpha_y]
+# def d_phi(t): return 1 / t
 
 
 print(f'{'='*80}')
 print('ex_1_2_7.py')
-solver = solve_dde(f, alpha, phi, t_span, d_f=d_f,
-                   d_alpha=d_alpha, d_phi=d_phi)
+solver = solve_dde(f, alpha, phi, t_span)
 # solver = Solver(f, alpha, phi, t_span)
 # solver.f_y = f_y
 # solver.f_x = f_x
