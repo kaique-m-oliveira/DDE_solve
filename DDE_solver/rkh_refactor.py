@@ -273,6 +273,9 @@ class RungeKutta:
     def is_there_disc(self):
         tn, h = self.t[0], self.h
         eta, alpha = self.solution.etas[-1], self.problem.alpha
+        d_alpha = self.problem.d_alpha
+        if self.neutral:
+            beta = self.problem.beta
         discs = self.solution.discs
         hn = self.solution.t[-1] - self.solution.t[-2]
 
@@ -281,21 +284,32 @@ class RungeKutta:
 
         theta = 1 + h/hn
 
-        def d_zeta(t, disc):
-            return alpha(t, eta(t)) - disc  # np.full(self.ndelays, disc)
+        def d_zeta(delay, t, disc):
+            return delay(t, eta(t)) - disc  # np.full(self.ndelays, disc)
+
 
         for disc in discs:
 
-            sign_change = d_zeta(tn, disc) * d_zeta(tn + theta * h, disc) < 0
-            if np.any(sign_change):
-                new_disc = self.get_disc(disc, sign_change)
+            sign_change_alpha = d_zeta(alpha, tn, disc) * d_zeta(alpha, tn + theta * h, disc) < 0
+            new_disc = None
+            if np.any(sign_change_alpha):
+                new_disc = self.get_disc(alpha, d_alpha, disc, sign_change_alpha)
+
+            if self.neutral:
+                sign_change_beta = d_zeta(beta, tn, disc) * d_zeta(beta, tn + theta * h, disc) < 0
+                if np.any(sign_change_beta):
+                    d_beta = self.problem.d_beta
+                    new_disc_beta = self.get_disc(beta, d_beta, disc, sign_change_beta)
+                    if new_disc is not None:
+                        new_disc = min(new_disc, new_disc_beta)
+
+            if new_disc is not None:
                 self.disc = new_disc
                 return True
         return False
 
-    def get_disc(self, disc, disc_position):
-        alpha = self.problem.alpha
-        alpha_t, alpha_y = self.problem.d_alpha
+    def get_disc(self, delay, d_delay, disc, disc_position):
+        delay_t, delay_y = d_delay
         eta = self.solution.etas[-1]
         t_guess = self.t[0] + self.h/2
         indices = np.where(disc_position)[0].tolist()
@@ -305,7 +319,7 @@ class RungeKutta:
         for idx in indices:
 
             def d_zeta(t):
-                return alpha(t, eta(t))[idx] - disc
+                return delay(t, eta(t))[idx] - disc
 
             print('d_zeta(t_guess)', d_zeta(t_guess), 'shape', d_zeta(t_guess))
             sol = my_root(d_zeta, t_guess, [
@@ -361,9 +375,8 @@ class RungeKutta:
         self.y[1] = yn + h * (self.b @ self.K[0:n_stages])
         self.stages_calculated = n_stages
 
-        # print(f'tn = {tn}, h = {
-        #       h}, yn+1 = {self.y[1]}, yn.shape {self.y[1].shape} ')
-        # print(f'yn+1 = {self.y[1]} real_sol = {real_sol(tn + h)} diff={abs(self.y[1] - real_sol(tn + h))}')
+        print(f'tn = {tn}, h = {
+              h}, yn+1 = {self.y[1]}, yn.shape {self.y[1].shape} ')
         # print('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF')
         # print('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF')
         # input('RK4 stuff')
@@ -525,12 +538,13 @@ class RungeKutta:
 
             # print('err', err)
             # print('TOL', TOL, 'rho', rho, rho*TOL)
-            y1 = yn + h * (self.b @ self.K[0:4])
+            # y1 = yn + h * (self.b @ self.K[0:4])
             # print(f'tn = {tn}, h = {
             #       h}, yn+1 = {y1}, yn.shape {y1.shape} ')
             # print(f'yn+1 = {y1} real_sol = {real_sol(tn + h)
             #                                        } diff={y1 - real_sol(tn + h)}')
             # input(f'{'A'*400} ')
+            print('Newton falhou')
             return False
         # input(f'deu certo com erro {err} e {iter} iterações')
         return True
@@ -670,6 +684,8 @@ class RungeKutta:
     def error_est_method(self):
         f, alpha = self.problem.f,  self.problem.alpha
         if self.n_stages["discrete_err_est_method"] - self.stages_calculated <= 0:
+            K = self.K[0:self.n_stages["discrete_err_est_method"]]
+            self.y_tilde = self.y[0] + self.h * (self.b_err @ K)
             return
         else:
             for i in range(self.stages_calculated, self.n_stages["discrete_err_est_method"]):
@@ -690,8 +706,9 @@ class RungeKutta:
         self.y_tilde = self.y[0] + self.h * (self.b_err @ K)
 
     def disc_local_error_satistied(self):
+        denom = max(self.h, 10**-12)
         self.disc_local_error = (
-            np.linalg.norm(self.y_tilde - self.y[1]) / self.h
+            np.linalg.norm(self.y_tilde - self.y[1])/denom #/ self.h
         )  # eq 7.3.4
 
         if self.disc_local_error <= self.params.TOL:
@@ -764,7 +781,8 @@ class RungeKutta:
 
         if not local_disc_satisfied:
             print(f'failed disc t = {
-                self.t[0] + self.h}, h = {self.h}, err = {self.disc_local_error}')
+                self.t[1] + self.h}, h = {self.h}, err = {self.disc_local_error}')
+            print('y1', self.y[1], 'y1*', self.y_tilde)
             return False
 
         # print(f'successfull step with h = {self.h}')
@@ -807,8 +825,11 @@ class RungeKutta:
                     # print('self.h_next ', self.h_next)
                     if new_h < self.h:
                         print('disc_found', disc_found)
-                        if new_h not in self.solution.discs:
-                            self.solution.discs.append(disc_found)
+                        if self.disc not in self.solution.discs:
+                            # self.solution.discs.append(disc_found)
+                            self.solution.discs.append(self.disc)
+                            # print('self.solution.discs', self.solution.discs)
+                            # input(f'mais uma disc {self.disc}')
                         self.h = float(new_h)
                         self.t = [self.t[0], self.t[0] + self.h]
                     # input('stop')
@@ -888,6 +909,65 @@ class RK4HHL(RungeKutta):
 
     n_stages = {"discrete_method": 4, "discrete_err_est_method": 8,
                 "continuous_method": 6, "continuous_err_est_method": 5, "continuous_ovl_method": 4}
+
+
+class RK45(RungeKutta):
+    # Dormand–Prince RK5(4) with continuous extension
+
+    A = np.array([
+        [0, 0, 0, 0, 0, 0, 0],
+        [1/5, 0, 0, 0, 0, 0, 0],
+        [3/40, 9/40, 0, 0, 0, 0, 0],
+        [44/45, -56/15, 32/9, 0, 0, 0, 0],
+        [19372/6561, -25360/2187, 64448/6561, -212/729, 0, 0, 0],
+        [9017/3168, -355/33, 46732/5247, 49/176, -5103/18656, 0, 0],
+        [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0]
+    ], dtype=np.float64)
+
+    # 5th-order weights
+    b = np.array([35/384, 0, 500/1113, 125/192,
+                  -2187/6784, 11/84], dtype=np.float64)
+
+    # Error estimate weights (difference to 4th-order)
+    b_err = np.array([5179/57600, 0, 7571/16695, 393/640,
+                      -92097/339200, 187/2100, 1/40], dtype=np.float64)
+
+    # Stage time fractions
+    c = np.array([0, 1/5, 3/10, 4/5, 8/9, 1, 1], dtype=np.float64)
+
+    # Dense output coefficients (like your D matrix)
+    D = np.array([
+        [ 0.        ,  1.        , -2.86053867,  3.09957788, -1.16181058,  0.01391721],
+        [ 0.        ,  0.        ,  0.        ,  0.        ,  0.        ,  0.        ],
+        [ 0.        ,  0.        ,  4.04714150, -6.34535405,  2.79546509, -0.04801624],
+        [ 0.        ,  0.        , -3.94116007, 10.90400303, -6.72931751,  0.41751622],
+        [ 0.        ,  0.        ,  2.84194470, -7.54767586,  4.95763672, -0.57428174],
+        [ 0.        ,  0.        , -1.61098864,  4.21891584, -2.95010387,  0.47312904],
+        [ 0.        ,  0.        ,  1.52360117, -4.32946684,  3.08813015, -0.28226449]
+    ], dtype=np.float64)
+
+    D_ovl = D
+    D_err = D
+
+    order = {
+        "discrete_method": 5,
+        "discrete_err_est_method": 4,
+        "continuous_method": 4,
+        "continuous_err_est_method": 4,
+        "continuous_ovl_method": 4
+    }
+
+
+    n_stages = {
+        "discrete_method": 6,
+        "discrete_err_est_method": 7,   # b_err has 7 entries
+        "continuous_method": 7,   # dense output uses 7 coeffs
+        "continuous_err_est_method": 7, 
+        "continuous_ovl_method": 7
+    }
+
+
+
 
 
 class Problem:
@@ -1188,7 +1268,8 @@ def solve_dde(f, alpha, phi, t_span, neutral=False, beta=None, d_f=None, d_alpha
     print("Initial h:", h)
     print("-" * 80)
 
-    first_step = RK4HHL(problem, solution, h, neutral)
+    # first_step = RK4HHL(problem, solution, h, neutral)
+    first_step = RK45(problem, solution, h, neutral)
     status = solution.update(first_step.first_step_CRK())
     if status != None:
         raise ValueError(status)
@@ -1199,7 +1280,8 @@ def solve_dde(f, alpha, phi, t_span, neutral=False, beta=None, d_f=None, d_alpha
     calls = 0
     while t < tf:
         h = min(h, tf - t)
-        onestep = RK4HHL(problem, solution, h, neutral)
+        # onestep = RK4HHL(problem, solution, h, neutral)
+        onestep = RK45(problem, solution, h, neutral)
         status = solution.update(onestep.one_step_CRK())
         calls += onestep.number_of_calls
         if status != None:
