@@ -9,9 +9,6 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 
-
-
-
 def interval_bisection_step(f, a, b, TOL=1e-8, iter_max=100):
     a_new = a
     fa_new = f(a)
@@ -29,7 +26,7 @@ def interval_bisection_step(f, a, b, TOL=1e-8, iter_max=100):
         if fc == 0:
             return [c - TOL/2, c + TOL/2]
 
-        if fa_new*fc<0:
+        if fa_new*fc < 0:
             b_new = c
             fb_new = fc
         else:
@@ -39,16 +36,13 @@ def interval_bisection_step(f, a, b, TOL=1e-8, iter_max=100):
     return [a_new, b_new]
 
 
-        
-
-
 @dataclass
 class CRKParameters:
     theta1: float = 1 / 3
     TOL: float = 1e-7
     rho: float = 0.9
-    omega_min: float = 0.5 #was 0.5
-    omega_max: float = 1.2 #between 1.5 and 5
+    omega_min: float = 0.5  # was 0.5
+    omega_max: float = 1.2  # between 1.5 and 5
 
 
 def vectorize_func(func):
@@ -58,7 +52,7 @@ def vectorize_func(func):
     return wrapper
 
 
-def validade_arguments(f, alpha, phi, t_span, beta=False, phi_t = False):
+def validade_arguments(f, alpha, phi, t_span, beta=False, phi_t=False):
     t0, tf = map(float, t_span)
     t_span = [t0, tf]
     y0 = phi(t0)
@@ -97,7 +91,7 @@ def validade_arguments(f, alpha, phi, t_span, beta=False, phi_t = False):
 
 
 class RungeKutta:
-    def __init__(self, problem, solution, h, neutral=False, Atol = 1e-8, Rtol = 1e-8):
+    def __init__(self, problem, solution, h, neutral=False, Atol=1e-8, Rtol=1e-8):
 
         A: np.ndarray = NotImplemented
         b: np.ndarray = NotImplemented
@@ -130,9 +124,10 @@ class RungeKutta:
         self.params = CRKParameters()
         self.overlap = False
         self.test = False
-        self.disc = False #either False or a pair (disc_old, disc_new)
+        self.disc = False  # either False or a pair (disc_old, disc_new)
         self.ndim = problem.ndim
         self.ndelays = problem.n_state_delays
+        self.old_disc = np.full(problem.n_state_delays, None)
         self.fails = 0
         self.stages_calculated = 0
         self.store_times = []
@@ -143,6 +138,7 @@ class RungeKutta:
         self.first_eta = True
         self.disc_position = False
         self.disc_beta_positions = False
+        self.disc_interval = None
 
     @property
     def eeta(self):
@@ -161,7 +157,7 @@ class RungeKutta:
                     elif not self.first_eta:
                         results[i] = self._hat_eta_0(t[i])
                     else:
-                        results[i] = self.solution.eta(t[i], ov = True)
+                        results[i] = self.solution.eta(t[i], ov=True)
             return np.squeeze(results)
         return eval
 
@@ -182,14 +178,11 @@ class RungeKutta:
                     elif not self.first_eta:
                         results[i] = self._hat_eta_0_t(t[i])
                     else:
-                        results[i] = self.solution.eta_t(t[i], ov = True)
+                        results[i] = self.solution.eta_t(t[i], ov=True)
                 # else:
                 #     results[i] = self._hat_eta_0_t(t[i])
             return np.squeeze(results)
         return eval
-
-
-
 
     def is_there_disc(self):
         tn, h = self.t[0], self.h
@@ -201,27 +194,27 @@ class RungeKutta:
         if h <= 1e-12:
             return False
 
-
         def d_zeta(delay, t, disc):
             return delay(t, eta(t)) - disc  # np.full(self.ndelays, disc)
 
-
         for old_disc in discs:
-            sign_change_alpha = d_zeta(alpha, tn, old_disc) * d_zeta(alpha, tn + h, old_disc) < 0
+            sign_change_alpha = d_zeta(
+                alpha, tn, old_disc) * d_zeta(alpha, tn + h, old_disc) < 0
             new_disc = None
             if np.any(sign_change_alpha):
                 self.disc_position = sign_change_alpha
                 new_disc = self.step_with_disc(alpha, old_disc)
                 if new_disc:
-                    self.disc = (old_disc, self.t[0] + self.h)
+                    self.disc = self.t[0] + self.h
                 return True
-            
 
             if self.neutral:
-                sign_change_beta = d_zeta(beta, tn, old_disc) * d_zeta(beta, tn + h, old_disc) < 0
+                sign_change_beta = d_zeta(
+                    beta, tn, old_disc) * d_zeta(beta, tn + h, old_disc) < 0
                 if np.any(sign_change_beta):
                     d_beta = self.problem.d_beta
-                    new_disc_beta = self.get_disc(beta, d_beta, old_disc, sign_change_beta)
+                    new_disc_beta = self.get_disc(
+                        beta, d_beta, old_disc, sign_change_beta)
                     if new_disc is not None:
                         new_disc = min(new_disc, new_disc_beta)
 
@@ -235,33 +228,50 @@ class RungeKutta:
         print('pos', self.disc_position)
         indices = np.where(self.disc_position)[0].tolist()
         a, b = self.t[0], self.t[0] + self.h
+        TOL = np.max(self.Atol)
 
-        for idx in indices:
-            while (b - a)/2 > np.max(self.Atol):
-                def d_zeta(t):
-                    return delay(t, eta(t))[idx] - disc
+        for idx in indices[:]:
 
-                a_new, b  = interval_bisection_step(d_zeta, a, b, TOL=np.max(self.Atol), iter_max=100)
+            def d_zeta(t):
+                return delay(t, eta(t))[idx] - disc
 
-                self.h = a_new - self.t[0]
-                success = self.try_step_CRK()
-                if success:
-                    eta = self.new_eta[1]
-                    a = a_new
-                else: 
-                    self.h = (a_new - a)/2 - self.t[0]
+            if self.disc_interval is None:
+                max_iter = int(np.ceil(np.log2(self.h/TOL))) + 3
+                for _ in range(max_iter):
+                    if (b - a)/2 < TOL:
+                        self.h = b - self.t[0]
+                        self.disc_interval = [a, b]
+                        break
+
+                    a_new, b = interval_bisection_step(
+                        d_zeta, a, b, TOL=np.max(self.Atol), iter_max=100)
+                    self.h = a_new - self.t[0]
                     success = self.try_step_CRK()
                     if success:
                         eta = self.new_eta[1]
-                        a = (a_new - a)/2
+                        a = a_new
                     else:
-                        return False
-            self.h = b - self.t[0]
-            return True
+                        self.h = (a_new - a)/2 - self.t[0]
+                        success = self.try_step_CRK()
+                        if success:
+                            eta = self.new_eta[1]
+                            a = (a_new - a)/2
+                        else:
+                            # Failed to spot a disc, gotta remove it
+                            indices.remove(idx)
+                            break
+            else:
+                a, b = self.disc_interval
+                # we now only need to check if the new idx fails
+                if d_zeta(a)*d_zeta(b) >= 0:
+                    indices.remove(idx)
 
+        # if we got here, we found the disc at the indices
+        self.old_disc[indices] = disc
 
+        return True
 
-    def one_step_RK4(self, eta_ov = None, eta_t_ov = None):
+    def one_step_RK4(self, eta_ov=None, eta_t_ov=None):
         tn, h, yn = self.t[0], self.h, self.y[0]
         eta = self.solution.eta
         f, alpha = self.problem.f, self.problem.alpha
@@ -318,7 +328,6 @@ class RungeKutta:
 
         return True
 
-
     def fixed_point(self):
         tn, h = self.t[0], self.h
         alpha = self.problem.alpha
@@ -327,12 +336,12 @@ class RungeKutta:
             beta = self.problem.beta
 
         K = self.K[0:self.n_stages["discrete_method"]]
-        self.one_step_RK4(eta_ov = self.eeta, eta_t_ov=self.eeta_t)
+        self.one_step_RK4(eta_ov=self.eeta, eta_t_ov=self.eeta_t)
         self.first_eta = False
         max_iter = 10
         for i in range(max_iter):
-            self.one_step_RK4(eta_ov = self.eeta, eta_t_ov=self.eeta_t)
-            if np.linalg.norm(K - self.K[0:self.n_stages["discrete_method"]])<= 1e-7:
+            self.one_step_RK4(eta_ov=self.eeta, eta_t_ov=self.eeta_t)
+            if np.linalg.norm(K - self.K[0:self.n_stages["discrete_method"]]) <= 1e-7:
                 return True
             K = self.K[0:self.n_stages["discrete_method"]]
         return False
@@ -367,7 +376,6 @@ class RungeKutta:
 
         return eta0
 
-
     def _eta_0_t(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
@@ -400,7 +408,6 @@ class RungeKutta:
         bs = (self.D_ovl @ theta).squeeze()
         eta0 = bs @ K
         return eta0
-
 
     def build_eta_1(self):
         f, alpha = self.problem.f,  self.problem.alpha
@@ -441,7 +448,6 @@ class RungeKutta:
         eta0 = bs @ K
         return eta0
 
-
     def error_est_method(self):
         f, alpha = self.problem.f,  self.problem.alpha
         if self.n_stages["discrete_err_est_method"] - self.stages_calculated <= 0:
@@ -467,10 +473,12 @@ class RungeKutta:
         self.y_tilde = self.y[0] + self.h * (self.b_err @ K)
 
     def discrete_disc_satistied(self):
-        sc = self.Atol +  np.maximum(np.abs(self.y[1]), np.abs(self.y_tilde))*self.Rtol
+        sc = self.Atol + \
+            np.maximum(np.abs(self.y[1]), np.abs(self.y_tilde))*self.Rtol
 
         self.disc_local_error = (
-            np.linalg.norm((self.y_tilde - self.y[1])/sc)/np.sqrt(self.ndim)#/self.h
+            np.linalg.norm(
+                (self.y_tilde - self.y[1])/sc)/np.sqrt(self.ndim)  # /self.h
         )  # eq 7.3.4
 
         if self.disc_local_error <= 1:
@@ -484,7 +492,7 @@ class RungeKutta:
         tn, h = self.t[0], self.h
         val1 = self.new_eta[0](tn + h/2)
         val2 = self.new_eta[1](tn + h/2)
-        sc = self.Atol +  np.maximum(np.abs(val1), np.abs(val2))*self.Rtol
+        sc = self.Atol + np.maximum(np.abs(val1), np.abs(val2))*self.Rtol
 
         self.uni_local_error = (
             np.linalg.norm((val1 - val2)/sc)/np.sqrt(self.ndim)
@@ -515,55 +523,54 @@ class RungeKutta:
 
         uniform_disc_satistied = self.uniform_disc_satistied()
 
-
         facmax = self.params.omega_max
         facmin = self.params.omega_min
         fac = self.params.rho
         err1 = self.disc_local_error if self.disc_local_error >= 1e-15 else 1e-15
         err2 = self.uni_local_error if self.uni_local_error >= 1e-15 else 1e-15
-        pp = 4 #FIX: adicionar o agnóstico
+        pp = 4  # FIX: adicionar o agnóstico
         qq = 3
-        self.h_next = self.h* min(facmax, max(facmin, min(fac*(1/err1)**(1/pp + 1), fac*(1/err2)**(1/qq + 1))))
-    
+        self.h_next = self.h * \
+            min(facmax, max(facmin, min(fac*(1/err1) **
+                (1/pp + 1), fac*(1/err2)**(1/qq + 1))))
+
         # print('disc err = ', self.disc_local_error, 'uni err', self.uni_local_error)
 
         if not discrete_disc_satisfied or not uniform_disc_satistied:
             self.h = self.h_next
-            print(f'not sucessfull disc satisfied: {discrete_disc_satisfied} uni satisf: {uniform_disc_satistied}')
+            print(f'not sucessfull disc satisfied: {
+                  discrete_disc_satisfied} uni satisf: {uniform_disc_satistied}')
             return False
-            
-        err3 = np.linalg.norm(self.y[1] - self.y_tilde)/self.h
 
+        err3 = np.linalg.norm(self.y[1] - self.y_tilde)/self.h
 
         return True
 
-
     def termination_test(self):
-        epsilon = np.sqrt(np.finfo(float).eps) 
-        alpha =  self.problem.alpha
+        epsilon = np.sqrt(np.finfo(float).eps)
+        alpha = self.problem.alpha
         y1 = self.y[1]
         print('y1', y1)
         f = self.problem.f
         eta = self.eeta
-        old_disc, t = self.disc
+        print('old_disc', self.old_disc)
+        old_disc = self.old_disc[0]
+        t = self.disc
 
         print('disc_position', self.disc_position)
         print('old_disc', old_disc)
 
-
         y_minus = y1 + epsilon*f(t, y1, eta(old_disc - epsilon))
         print('-----------------y_minus-----------------')
-        print('f()',f(t, y1, eta(old_disc - epsilon)))
-        print('eps*f()', epsilon* f(t, y1, eta(old_disc - epsilon)))
+        print('f()', f(t, y1, eta(old_disc - epsilon)))
+        print('eps*f()', epsilon * f(t, y1, eta(old_disc - epsilon)))
         print('y_minus', y_minus)
-
 
         y_plus = y1 + epsilon*f(t, y1, eta(old_disc + epsilon))
         print('-----------------y_plus-----------------')
-        print('f()',f(t, y1, eta(old_disc + epsilon)))
-        print('eps*f()', epsilon* f(t, y1, eta(old_disc + epsilon)))
+        print('f()', f(t, y1, eta(old_disc + epsilon)))
+        print('eps*f()', epsilon * f(t, y1, eta(old_disc + epsilon)))
         print('y_plus', y_plus)
-
 
         plus = alpha(t + epsilon, y_plus) > old_disc
         minus = alpha(t + epsilon, y_minus) < old_disc
@@ -572,24 +579,11 @@ class RungeKutta:
         print(f'plus {plus}')
         print(f'minus {minus}')
 
-
         print('--------------------D stuff --------------------')
         D_plus = alpha(t + epsilon, y_plus) - alpha(t, y1)
         D_minus = alpha(t + epsilon, y_minus) - alpha(t, y1)
         print(f'D_plus {D_plus} is less then zero {D_plus < 0}')
         input(f'D_minus {D_minus} is more than zero {D_minus > 0}')
-
-
-        # Check for termination
-        if not np.all(np.logical_or(plus > self.disc[0], minus < self.disc[0])):
-            print('_______________________my test____________________________')
-            print('fucking logic', np.all(np.logical_or(plus > self.disc[0], minus < self.disc[0])))
-            print('big fail')
-            print('plus > disc', plus > self.disc[0])
-            print('minus < disc', minus < self.disc[0])
-            print('_______________________my test____________________________')
-            input()
-
 
     def one_step_CRK(self, max_iter=15):
         success = self.try_step_CRK()
@@ -612,7 +606,6 @@ class RungeKutta:
                     return True, self
 
             return False, 0
-
 
     def first_step_CRK(self, max_iter=5):
         self.eta = self.solution.eta
@@ -708,13 +701,13 @@ class RK45(RungeKutta):
 
     # Dense output coefficients (like your D matrix)
     D = np.array([
-        [ 0.        ,  1.        , -2.86053867,  3.09957788, -1.16181058,  0.01391721],
-        [ 0.        ,  0.        ,  0.        ,  0.        ,  0.        ,  0.        ],
-        [ 0.        ,  0.        ,  4.04714150, -6.34535405,  2.79546509, -0.04801624],
-        [ 0.        ,  0.        , -3.94116007, 10.90400303, -6.72931751,  0.41751622],
-        [ 0.        ,  0.        ,  2.84194470, -7.54767586,  4.95763672, -0.57428174],
-        [ 0.        ,  0.        , -1.61098864,  4.21891584, -2.95010387,  0.47312904],
-        [ 0.        ,  0.        ,  1.52360117, -4.32946684,  3.08813015, -0.28226449]
+        [0.,  1., -2.86053867,  3.09957788, -1.16181058,  0.01391721],
+        [0.,  0.,  0.,  0.,  0.,  0.],
+        [0.,  0.,  4.04714150, -6.34535405,  2.79546509, -0.04801624],
+        [0.,  0., -3.94116007, 10.90400303, -6.72931751,  0.41751622],
+        [0.,  0.,  2.84194470, -7.54767586,  4.95763672, -0.57428174],
+        [0.,  0., -1.61098864,  4.21891584, -2.95010387,  0.47312904],
+        [0.,  0.,  1.52360117, -4.32946684,  3.08813015, -0.28226449]
     ], dtype=np.float64)
 
     D_ovl = D
@@ -728,23 +721,19 @@ class RK45(RungeKutta):
         "continuous_ovl_method": 4
     }
 
-
     n_stages = {
         "discrete_method": 6,
         "discrete_err_est_method": 7,   # b_err has 7 entries
         "continuous_method": 7,   # dense output uses 7 coeffs
-        "continuous_err_est_method": 7, 
+        "continuous_err_est_method": 7,
         "continuous_ovl_method": 7
     }
 
 
-
-
-
 class Problem:
-    def __init__(self, f, alpha, phi, t_span,  beta = False, phi_t = False, neutral = False):
-        ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span, beta, phi_t  = validade_arguments(
-            f, alpha, phi, t_span,  beta = beta, phi_t = phi_t)
+    def __init__(self, f, alpha, phi, t_span,  beta=False, phi_t=False, neutral=False):
+        ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span, beta, phi_t = validade_arguments(
+            f, alpha, phi, t_span,  beta=beta, phi_t=phi_t)
         self.t_span = np.array(t_span)
         self.ndim, self.n_state_delays, self.n_neutral_delays = ndim, n_state_delays, n_neutral_delays
         self.f, self.alpha, self.phi, self.t_span = f, alpha, phi, t_span
@@ -754,7 +743,7 @@ class Problem:
 
 
 class Solution:
-    def __init__(self, problem: Problem, discs = []):
+    def __init__(self, problem: Problem, discs=[]):
         self.problem = problem
         self.t = [problem.t_span[0]]
         self.y = [np.atleast_1d(problem.phi(problem.t_span[0]))]
@@ -773,8 +762,8 @@ class Solution:
         self.t_next = None
 
     @property
-    def eta(self, ov = False, limit_direction = False):
-        def eval(t, ov = ov, limit_direction = limit_direction):
+    def eta(self, ov=False, limit_direction=False):
+        def eval(t, ov=ov, limit_direction=limit_direction):
             self.eta_calls += 1
             t = np.atleast_1d(t)  # accept scalar or array
             results = np.empty((len(t), self.problem.ndim), dtype=float)
@@ -782,13 +771,14 @@ class Solution:
                 idx = bisect_left(self.t, t[i])
                 if t[i] < self.t[0]:
                     if limit_direction:
-                        #taking a left limit approximation
-                        results[i] = self.etas[0](t[i] + limit_direction[i]*np.info(float).eps) 
+                        # taking a left limit approximation
+                        results[i] = self.etas[0](
+                            t[i] + limit_direction[i]*np.info(float).eps)
                     else:
                         results[i] = self.etas[0](t[i])
                 if t[i] <= self.t[-1]:
                     if limit_direction:
-                        #taking a left limit approximation
+                        # taking a left limit approximation
                         results[i] = self.etas[idx + limit_direction[i]](t[i])
                     else:
                         results[i] = self.etas[idx](t[i])
@@ -802,8 +792,8 @@ class Solution:
         return eval
 
     @property
-    def eta_t(self, ov = False):
-        def eval(t, ov = ov):
+    def eta_t(self, ov=False):
+        def eval(t, ov=ov):
             self.eta_calls += 1
             t = np.atleast_1d(t)  # accept scalar or array
             results = np.empty((len(t), self.problem.ndim), dtype=float)
@@ -820,16 +810,16 @@ class Solution:
             return np.squeeze(results)
         return eval
 
-
     def update(self, onestep):
         success, step = onestep
         if step.disc != False:
-            self.discs.append(step.disc[1])
-            print(f'before accepting {step.disc[1]} and t = {step.t[0] + step.h}')
+            self.discs.append(step.disc)
+            print(f'before accepting {step.disc} and t = {
+                  step.t[0] + step.h}')
 
         if success:  # Step accepted
             # if (self.t[-1] + step.h != step.t[1]):
-                # print('sum', self.t[-1] + step.h, 't1', step.t[1])
+            # print('sum', self.t[-1] + step.h, 't1', step.t[1])
             self.t.append(step.t[0] + step.h)
             self.y.append(step.y[1])
             self.etas.append(step.new_eta[1])
@@ -842,9 +832,10 @@ class Solution:
             return "Failed"
 
 
-def solve_dde(f, alpha, phi, t_span, method = 'RK45', neutral=False, beta=None, d_phi=None, discs = []):
-    problem = Problem(f, alpha, phi, t_span, beta = beta, phi_t = d_phi, neutral=neutral)
-    solution = Solution(problem, discs = discs)
+def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_phi=None, discs=[]):
+    problem = Problem(f, alpha, phi, t_span, beta=beta,
+                      phi_t=d_phi, neutral=neutral)
+    solution = Solution(problem, discs=discs)
     params = CRKParameters()
     t, tf = problem.t_span
 
