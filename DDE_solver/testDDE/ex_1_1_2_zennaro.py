@@ -30,12 +30,7 @@ def real_sol(t):
 
 
 t_span = [0, 3]
-
-d_f = [0, lambda t, y, x: 0, lambda t, y, x: -1]
-d_alpha = [lambda t, y: 1, lambda t, y: 0]
-d_phi = [lambda t: 0]
-solver = solve_dde(f, alpha, phi, t_span, d_f=d_f,
-                   d_alpha=d_alpha, d_phi=d_phi)
+solver = solve_dde(f, alpha, phi, t_span)
 # solver = Solver(f, alpha, phi, t_span, d_f=d_f, d_alpha=d_alpha, d_phi=d_phi)
 
 print(f'{'='*80}')
