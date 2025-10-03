@@ -530,14 +530,43 @@ class RungeKutta:
 
         return True
 
-    def termination_test(self):
-        epsilon = np.sqrt(np.finfo(float).eps)
+    def investigate_disc(self):
+        true_disc = self.validade_disc()
+
+        if not true_disc:
+            self.disc = None
+            return
+
+        self.disc = self.disc_interval[1]
+        self.h = self.disc - self.t[0]
+        self.get_possible_branches()
+        self.investigate_branches()
+
+    def investigate_branches(self):
+        alpha_limits = (self.alpha_discs != None) + 0
+        idx = np.where(alpha_limits)[0]
+        N = len(idx)
+        print('alpha_limits', alpha_limits)
+        print('idx', idx)
+        print('N', N)
+
+        for mask in range(1 << N):      # loop over 0..2^k-1
+            b = alpha_limits.copy()
+            for j in range(N):
+                if (mask >> j) & 1:     # check j-th bit
+                    b[idx[j]] = -1
+            input(b)
+        print('investigation')
+
+    def terminate(self):
+        epsilon = np.finfo(float).eps**(1/3)
         alpha = self.problem.alpha
+        if self.neutral:
+            beta = self.problem.beta
+
         y1 = self.y[1]
-        print('y1', y1)
         f = self.problem.f
-        eta = self.eeta
-        print('old_disc', self.old_disc)
+        eta = self.solution.eta
         old_disc = self.old_disc[0]
         t = self.disc
 
@@ -569,24 +598,13 @@ class RungeKutta:
         print(f'D_plus {D_plus} is less then zero {D_plus < 0}')
         input(f'D_minus {D_minus} is more than zero {D_minus > 0}')
 
-    def investigate_disc(self):
-        true_disc = self.validade_disc()
-
-        if not true_disc:
-            self.disc = None
-            return
-
-        self.disc = self.disc_interval[1]
-        self.h = self.disc - self.t[0]
-        self.get_possible_branches()
-
     def get_possible_branches(self):
         a, b = self.disc_interval
         eta, alpha = self.new_eta[1], self.problem.alpha
-        self.alpha_limits = np.full(self.problem.n_state_delays, None)
+        self.alpha_discs = np.full(self.problem.n_state_delays, None)
         if self.neutral:
             beta = self.problem.beta
-            self.beta_limits = np.full(self.problem.n_state_delays, None)
+            self.beta_discs = np.full(self.problem.n_state_delays, None)
         discs = self.solution.discs
 
         def d_zeta(delay, t, disc):
@@ -597,15 +615,15 @@ class RungeKutta:
                 alpha, a, old_disc) * d_zeta(alpha, b, old_disc) < 0
             if np.any(sign_change_alpha):
                 indices = np.where(sign_change_alpha)[0].tolist()
-                self.alpha_limits[indices] = old_disc
+                self.alpha_discs[indices] = old_disc
 
             if self.neutral:
                 sign_change_beta = d_zeta(
                     beta, a, old_disc) * d_zeta(beta, b, old_disc) < 0
                 if np.any(sign_change_beta):
                     indices = np.where(sign_change_beta)[0].tolist()
-                    self.beta_limits[indices] = old_disc
-        print('limits of alpha', self.alpha_limits)
+                    self.beta_discs[indices] = old_disc
+        print('limits of alpha', self.alpha_discs)
         input('lets see boys')
 
         return False
