@@ -120,7 +120,6 @@ class RungeKutta:
         self.disc = None  # either False or a pair (disc_old, disc_new)
         self.ndim = problem.ndim
         self.ndelays = problem.n_state_delays
-        self.old_disc = np.full(problem.n_state_delays, None)
         self.fails = 0
         self.stages_calculated = 0
         self.store_times = []
@@ -131,7 +130,6 @@ class RungeKutta:
         self.first_eta = True
         self.disc_position = False
         self.disc_beta_positions = False
-        self.new_discs = []
         self.disc_interval = None
 
     @property
@@ -209,7 +207,7 @@ class RungeKutta:
 
         return False
 
-    def get_disc(self, delay, disc):
+    def get_disc(self, delay, old_disc):
         indices = np.where(self.disc_position)[0].tolist()
         a, b = self.t[0], self.t[0] + self.h
         eta = self.solution.etas[-1]
@@ -221,33 +219,26 @@ class RungeKutta:
                 self.h = t - self.t[0]
                 self.one_step_RK4()
                 y1 = self.y[1]
-                return delay(t, y1)[idx] - disc
+                return delay(t, y1)[idx] - old_disc
 
             def d_zeta(t):
-                return delay(t, eta(t))[idx] - disc
+                return delay(t, eta(t))[idx] - old_disc
 
-            disc_interval = bisection_method(
+            # We only need to check one disc
+            self.disc_interval = bisection_method(
                 d_zeta, a, b, TOL=np.max(self.Atol))
-            discs.append((disc_interval, idx))
-
-        # discs almost never has more than one element
-        discs.sort(key=lambda x: x[0][0])
-        self.new_discs.append((disc, idx))
-        self.disc_interval = disc_interval
-        return
+            self.old_disc = old_disc
+            self.disc_delay_and_idx = (delay, idx)
+            return
 
     def validade_disc(self):
-        a, b = self.disc_interval
         eta = self.new_eta[1]
-        etav = self.solution.etas[-1]
-        delay = self.problem.alpha
-        disc, idx = self.new_discs[0]
+        a, b = self.disc_interval
+        old_disc = self.old_disc
+        delay, idx = self.disc_delay_and_idx
 
         def d_zeta(t):
-            return delay(t, eta(t))[idx] - disc
-
-        def d_zetav(t):
-            return delay(t, etav(t))[idx] - disc
+            return delay(t, eta(t))[idx] - old_disc
 
         if d_zeta(a)*d_zeta(b) < 0:
             return True
@@ -543,68 +534,56 @@ class RungeKutta:
         self.h = self.disc - self.t[0]
 
         # WARN: this is only concerning state dependent for now
-        input('here')
-        if self.disc < self.solution.t[0]:
+        if self.solution.breaking_discs:
             self.get_possible_branches()
-            self.investigate_branches()
+            if self.old_disc in self.solution.breaking_discs:
+                self.investigate_branches()
 
     def investigate_branches(self):
+        old_disc = self.old_disc
+        disc = self.disc
+        f = self.problem.f
+        alpha = self.problem.alpha
+        alpha_discs = self.alpha_discs
+        eta = self.solution.eta
+        eps = np.finfo(float).eps**(1/3)
+
         alpha_limits = (self.alpha_discs != None) + 0
         idx = np.where(alpha_limits)[0]
         N = len(idx)
-        print('alpha_limits', alpha_limits)
-        print('idx', idx)
-        print('N', N)
 
+        continuation = []
         for mask in range(1 << N):      # loop over 0..2^k-1
-            b = alpha_limits.copy()
+            limit_direction = alpha_limits.copy()
             for j in range(N):
                 if (mask >> j) & 1:     # check j-th bit
-                    b[idx[j]] = -1
-            input(b)
-        print('investigation')
+                    limit_direction[idx[j]] = -1
 
-    def terminate(self):
-        epsilon = np.finfo(float).eps**(1/3)
-        alpha = self.problem.alpha
-        if self.neutral:
-            beta = self.problem.beta
+            t1 = self.t[0] + self.h
+            y1 = self.y[1]
+            alpha1 = alpha(t1, y1)
+            alpha1 = [alpha1[i] if alpha_discs[i] is None else alpha_discs[i]
+                      for i in range(len(alpha1))]
 
-        y1 = self.y[1]
-        f = self.problem.f
-        eta = self.solution.eta
-        old_disc = self.old_disc[0]
-        t = self.disc
+            if not self.neutral:
+                y_lim = y1 + eps * \
+                    f(t1, y1, eta(alpha1, limit_direction=limit_direction))
 
-        print('disc_position', self.disc_position)
-        print('old_disc', old_disc)
+                continued = -1*limit_direction * \
+                    (alpha(t1 + eps, y_lim) - old_disc) < 0
+                mask = np.array(alpha_limits.astype(bool))
+                continued = continued[mask]
+                continuation.append(continued)
 
-        y_minus = y1 + epsilon*f(t, y1, eta(old_disc - epsilon))
-        print('-----------------y_minus-----------------')
-        print('f()', f(t, y1, eta(old_disc - epsilon)))
-        print('eps*f()', epsilon * f(t, y1, eta(old_disc - epsilon)))
-        print('y_minus', y_minus)
-
-        y_plus = y1 + epsilon*f(t, y1, eta(old_disc + epsilon))
-        print('-----------------y_plus-----------------')
-        print('f()', f(t, y1, eta(old_disc + epsilon)))
-        print('eps*f()', epsilon * f(t, y1, eta(old_disc + epsilon)))
-        print('y_plus', y_plus)
-
-        plus = alpha(t + epsilon, y_plus) > old_disc
-        minus = alpha(t + epsilon, y_minus) < old_disc
-        print('---------------------alpha----------------------')
-        print('disc', self.t[0] + self.h)
-        print(f'plus {plus}')
-        print(f'minus {minus}')
-
-        print('--------------------D stuff --------------------')
-        D_plus = alpha(t + epsilon, y_plus) - alpha(t, y1)
-        D_minus = alpha(t + epsilon, y_minus) - alpha(t, y1)
-        print(f'D_plus {D_plus} is less then zero {D_plus < 0}')
-        input(f'D_minus {D_minus} is more than zero {D_minus > 0}')
+        if not np.all(np.any(continuation)):
+            input('solution broke')
 
     def get_possible_branches(self):
+        """
+        This function checks for candidates for possible branches, 
+        it only needs to check for breaking discontinuities
+        """
+
         a, b = self.disc_interval
         eta, alpha = self.new_eta[1], self.problem.alpha
         self.alpha_discs = np.full(self.problem.n_state_delays, None)
@@ -616,21 +595,19 @@ class RungeKutta:
         def d_zeta(delay, t, disc):
             return delay(t, eta(t)) - disc  # np.full(self.ndelays, disc)
 
-        for old_disc in discs:
+        for disc in self.solution.breaking_discs:
             sign_change_alpha = d_zeta(
-                alpha, a, old_disc) * d_zeta(alpha, b, old_disc) < 0
+                alpha, a, disc) * d_zeta(alpha, b, disc) < 0
             if np.any(sign_change_alpha):
                 indices = np.where(sign_change_alpha)[0].tolist()
-                self.alpha_discs[indices] = old_disc
+                self.alpha_discs[indices] = disc
 
             if self.neutral:
                 sign_change_beta = d_zeta(
-                    beta, a, old_disc) * d_zeta(beta, b, old_disc) < 0
+                    beta, a, disc) * d_zeta(beta, b, disc) < 0
                 if np.any(sign_change_beta):
                     indices = np.where(sign_change_beta)[0].tolist()
-                    self.beta_discs[indices] = old_disc
-
-        return False
+                    self.beta_discs[indices] = disc
 
     def one_step_CRK(self, max_iter=10):
         success = self.try_step_CRK()
@@ -801,6 +778,7 @@ class Solution:
         self.etas = [problem.phi]
         self.etas_t = [problem.phi_t]
 
+        self.breaking_discs = {}
         if discs:
             self.validade_discs(discs)
         else:
@@ -811,7 +789,7 @@ class Solution:
         self.t_next = None
 
     @property
-    def eta(self, ov=False, limit_direction=False):
+    def eta(self, ov=False, limit_direction=None):
         def eval(t, ov=ov, limit_direction=limit_direction):
             self.eta_calls += 1
             t = np.atleast_1d(t)  # accept scalar or array
@@ -819,8 +797,8 @@ class Solution:
             for i in range(len(t)):
                 idx = bisect_left(self.t, t[i])
                 if t[i] <= self.t[0]:
-                    if limit_direction:
-                        if self.breaking_discs[t[i]]:
+                    if limit_direction is not None:
+                        if self.breaking_discs[t[i]] and limit_direction[i] != 0:
                             disc = self.breaking_discs[t[i]]
                             results[i] = disc[limit_direction[i]]
                             break
@@ -901,7 +879,6 @@ class Solution:
         # WARN: gotta add the check for neutral later, because the initial t[0] might break the neutral one
         discs.sort(key=lambda x: x[0])
 
-        self.breaking_discs = {}
         for disc in discs:
             self.breaking_discs[disc[0]] = {-1: disc[1], 1: disc[2]}
 

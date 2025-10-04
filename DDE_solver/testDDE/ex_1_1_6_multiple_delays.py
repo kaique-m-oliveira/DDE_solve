@@ -1,21 +1,6 @@
-# from DDE_solver.rkh_state import *
-# from DDE_solver.rkh_step_rejection import *
-# from DDE_solver.rkh_testing import *
-# from DDE_solver.rkh import *
 import numpy as np
 import matplotlib.pyplot as plt
-# from DDE_solver.rkh_ovl_simp_newton import *
-# from DDE_solver.rkh_fast_ov_test_disc import *
-# from DDE_solver.rkh_vectorize import *
 from DDE_solver.rkh_refactor import *
-# from DDE_solver.rkh_refactor_working import *
-# from DDE_solver.rkh_multiple_delays import *
-# from DDE_solver.rkh_LATEST import *
-# from DDE_solver.rkh_state_complete import *
-
-# from DDE_solver.rkh_NDDE import *
-
-# WARN: STATE EXAMPLE
 
 
 def f(t, y, x):
@@ -52,28 +37,9 @@ def real_sol(t):
 
 t_span = [0, 10]
 
-# d_f = [0, lambda t, y, x: 5, lambda t, y, x: 1]
-#
-#
-# def alpha_t(t, y):
-#     return [1, 1, 1, 1]
-#
-#
-# def alpha_y(t, y):
-#     return [0, 0, 0, 0]
-#
-#
-# d_alpha = [alpha_t, alpha_y]
-# def d_phi(t): return 0
+discs = [(0, 1, 0)]
 
-
-# tt = np.linspace(t_span[0], t_span[1], 100)
-# realsol = np.array([real_sol(t) for t in tt])
-# plt.plot(tt, realsol, color="red", label='real solution')
-# plt.show()
-
-
-solver = solve_dde(f, alpha, phi, t_span)
+solver = solve_dde(f, alpha, phi, t_span, discs=discs)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
 sol = np.array([solver.eta(i) for i in tt])
