@@ -175,8 +175,6 @@ class RungeKutta:
                         results[i] = self._hat_eta_0_t(t[i])
                     else:
                         results[i] = self.solution.eta_t(t[i], ov=True)
-                # else:
-                #     results[i] = self._hat_eta_0_t(t[i])
             return np.squeeze(results)
         return eval
 
@@ -360,8 +358,12 @@ class RungeKutta:
     def _eta_0_t(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
+        # pol_order = self.D_err.shape[1]
+        # theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+
         pol_order = self.D_err.shape[1]
-        theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+        n = np.arange(pol_order)
+        theta = np.where(n == 0, 0.0, n * theta ** (n - 1))
         K = self.K[0:self.n_stages["continuous_err_est_method"]]
         bs = (self.D @ theta).squeeze()
         eta0 = bs @ K
@@ -381,8 +383,12 @@ class RungeKutta:
     def _hat_eta_0_t(self, theta):
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
+        # pol_order = self.D_ovl.shape[1]
+        # theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+
         pol_order = self.D_ovl.shape[1]
-        theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+        n = np.arange(pol_order)
+        theta = np.where(n == 0, 0.0, n * theta ** (n - 1))
         K = self.K[0:self.n_stages["continuous_ovl_method"]]
         bs = (self.D_ovl @ theta).squeeze()
         eta0 = bs @ K
@@ -421,7 +427,9 @@ class RungeKutta:
         tn, h, yn = self.t[0], self.h, self.y[0]
         theta = (theta - tn) / h
         pol_order = self.D.shape[1]
-        theta = np.array([n*theta**(n-1) for n in range(pol_order)])
+        n = np.arange(pol_order)
+        theta = np.where(n == 0, 0.0, n * theta ** (n - 1))
+        # theta = np.array([n*theta**(n-1) for n in range(pol_order)])
         K = self.K[0:self.n_stages["continuous_method"]]
         bs = (self.D @ theta).squeeze()
         eta0 = bs @ K
@@ -541,6 +549,7 @@ class RungeKutta:
         # WARN: this is only concerning state dependent for now
         if self.solution.breaking_discs:
             self.get_possible_branches()
+            input(f'got disc? {self.solution.discs}')
 
     def get_possible_branches(self):
         """
@@ -574,14 +583,16 @@ class RungeKutta:
                     indices = np.where(sign_change_beta)[0].tolist()
                     self.beta_discs[indices] = disc
                     self.breaking_step = True
+                    input(f'breaking beta {self.beta_discs}')
 
     def investigate_branches(self):
+        if self.disc is None:
+            return None
         print('===================== INVESTIGATE ===========================')
         disc = self.disc
         f = self.problem.f
         alpha = self.problem.alpha
         alpha_discs = self.alpha_discs
-        print('alpha_discs', alpha_discs)
         old_disc = np.array([x if x is not None else 0 for x in alpha_discs])
         eta = self.solution.eta
         eps = np.finfo(float).eps**(1/3)
@@ -600,6 +611,13 @@ class RungeKutta:
 
             t1 = self.t[1]
             y1 = self.y[1]
+
+            # FIX: gotta fix this thing man
+            # if self.problem.n_state_delays == 1:
+            #     alpha1 = alpha(t1, y1)
+            # else:
+            #     alpha1 = alpha(t1, y1).squeeze()
+
             alpha1 = alpha(t1, y1)
             alpha1 = [alpha1[i] if alpha_discs[i] is None else alpha_discs[i]
                       for i in range(len(alpha1))]
@@ -612,9 +630,16 @@ class RungeKutta:
 
                 continued = -1*limit_direction * \
                     (alpha(t1 + eps, y_lim) - old_disc) < 0
-                print('continued', continued)
                 mask = np.array(alpha_limits.astype(bool))
+
                 continued = continued[mask]
+
+                # FIX: gotta fix this thing man
+                # if self.problem.n_state_delays == 1:
+                #     continued = continued[mask]
+                # else:
+                #     continued = continued[mask].squeeze()
+
                 continuation.append(continued)
                 print('___________________________________________________')
 
@@ -628,10 +653,10 @@ class RungeKutta:
             pos = np.where(possible_branches)[0][0]
             self.limit_direction = limit_directions[pos]
             print('lit ditection', self.limit_direction)
-            input(1)
             return "one branch"
         else:
-            input(2)
+            pos = np.where(possible_branches)[0].tolist()
+            self.limit_directions = np.array(limit_directions)[pos]
             return "branches"
 
     def one_step_CRK(self, max_iter=10):
@@ -648,32 +673,36 @@ class RungeKutta:
                     self.h = h
                     success = self.try_step_CRK()
                     if success:
+                        print('othersuccess')
                         self.investigate_disc()
                         return True, self
             iter += 1
 
         return False, 0
 
-    def first_step_CRK(self):
+    def first_step_investigate_branch(self):
         if self.solution.breaking_discs:
             self.alpha_discs = np.full(self.problem.n_state_delays, None)
             alpha0 = self.problem.alpha(self.t[0], self.y[0])
+            print('alpha0', alpha0, 'shape', alpha0.shape)
+            print('breaking discs', self.solution.breaking_discs)
 
             for i in range(self.problem.n_state_delays):
-                if alpha0[i] in self.solution.breaking_discs:
-                    self.alpha_discs[i] = alpha0[i]
+                if self.ndim == 1:
+                    if float(alpha0[i]) in self.solution.breaking_discs:
+                        self.alpha_discs[i] = float(alpha0[i])
+                # WARN:  NO CLUE IF THIS WORKS
+                else:
+                    for dim in range(self.ndim):
+                        if float(alpha0[i][dim]) in self.solution.breaking_discs:
+                            self.alpha_discs[i] = float(alpha0[i][dim])
 
             if np.any(self.alpha_discs):
-                self.old_disc = alpha0
                 self.disc = self.t[0]
                 state = self.investigate_branches()
-                if state == "one branch":
-                    self.eta = lambda t: self.solution.eta(
-                        t, limit_direction=self.limit_direction)
-                elif state == "branches":
-                    return "branches"
+                return state
 
-        return self.one_step_CRK(max_iter=7)
+        return None
 
 
 class RK4HHL(RungeKutta):
@@ -751,6 +780,7 @@ class Solution:
         self.etas_t = [problem.phi_t]
 
         self.breaking_discs = {}
+        self.phi_t_breaks = {}
         if discs:
             self.validade_discs(discs)
         else:
@@ -789,14 +819,30 @@ class Solution:
         return eval
 
     @property
-    def eta_t(self, ov=False):
-        def eval(t, ov=ov):
+    def eta_t(self, ov=False, limit_direction=None):
+        def eval(t, ov=ov, limit_direction=limit_direction):
             self.eta_calls += 1
             t = np.atleast_1d(t)  # accept scalar or array
             results = np.empty((len(t), self.problem.ndim), dtype=float)
             for i in range(len(t)):
                 idx = bisect_left(self.t, t[i])
-                if t[i] <= self.t[-1]:
+                if t[i] <= self.t[0]:
+                    if limit_direction is not None:
+                        if limit_direction[i] != 0:
+                            if t[i] in self.phi_t_breaks:
+                                disc = self.phi_t_breaks[t[i]]
+                                results[i] = disc[limit_direction[i]]
+                                continue
+                            # WARN: Special consideration for the first step
+                            elif t[i] == self.t[0]:
+                                if limit_direction[i] == -1:
+                                    results[i] = self.etas_t[0](self.t[0])
+                                    continue
+                                if limit_direction[i] == 1:
+                                    results[i] = self.etas_t[1](self.t[0])
+                                    continue
+                    results[i] = self.etas_t[0](t[i])
+                elif t[i] <= self.t[-1]:
                     results[i] = self.etas_t[idx](t[i])
                 else:
                     if ov:
@@ -878,6 +924,7 @@ class Solution:
                 elif progress == "one branch":
                     return "one branch"
                 elif progress == "branches":
+                    self.limit_directions = step.limit_directions
                     return "branches"
 
         if not success:
@@ -890,34 +937,58 @@ class SolutionList:
     def __init__(self):
         self.solutions = []
 
+    def append_solution(self, sol):
+        self.solutions.append(sol)
 
-def integrate_branch(solution):
+
+def recursive_integration(solution, solutionList):
+    for limit_direction in solution.limit_directions:
+        solution_copy = deepcopy(solution)
+        status, solution_copy = integrate_branch(
+            solution_copy, limit_direction)
+        if status == "branches":
+            recursive_integration(solution_copy, solutionList)
+        else:
+            solutionList.append_solution(solution_copy)
+            print('solutionList', solutionList.solutions)
+
+
+def integrate_branch(solution, limit_direction):
     t, tf = solution.t[-1], solution.problem.t_span[-1]
     problem = solution.problem
     neutral = solution.neutral
-    params = CRKParameters()
-    h = (params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
+    h = (1e-7 ** (1 / 4)) * 0.1  # Initial stepsize
 
+    # WARN: first integration step will be a limit_direction integration
+    onestep = RK4HHL(problem, solution, h, neutral)
+    onestep.eta = lambda t: solution.eta(
+        t, limit_direction=limit_direction)
+
+    status = solution.update(onestep.one_step_CRK())
+
+    calls = 0
     while t < tf:
         h = min(h, tf - t)
-        onestep = RK4HHL(problem, solution, h, neutral)
-        status = solution.update(onestep.first_step_CRK())
-
         if status == "Success":
             onestep = RK4HHL(problem, solution, h, neutral)
+
         elif status == "one branch":
             limit_direction = onestep.limit_direction
             onestep = RK4HHL(problem, solution, h, neutral)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
+
         elif status == "branches":
-            raise ValueError("Still not implemented")
+            return "branches", solution
+
         elif status == "terminated" or status == "failed":
             raise ValueError(f"solution failed duo to {status}")
 
+        status = solution.update(onestep.one_step_CRK())
         calls += onestep.number_of_calls
         h = onestep.h_next
         t = solution.t[-1]
+    return "Success", solution
 
 
 def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_phi=None, discs=[]):
@@ -933,7 +1004,21 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
     print("-" * 80)
 
     onestep = RK4HHL(problem, solution, h, neutral)
-    status = solution.update(onestep.first_step_CRK())
+    branch_status = onestep.first_step_investigate_branch()
+
+    if branch_status == "one branch":
+        limit_direction = onestep.limit_direction
+        onestep.eta = lambda t: solution.eta(
+            t, limit_direction=limit_direction)
+    elif branch_status == "branches":
+        solutionList = SolutionList()
+        solution.limit_directions = onestep.limit_directions
+        recursive_integration(solution, solutionList)
+        return solutionList
+    elif branch_status == "terminated" or branch_status == "failed":
+        raise ValueError(f"solution failed duo to {branch_status}")
+
+    status = solution.update(onestep.one_step_CRK())
 
     h = onestep.h_next
     t = solution.t[-1]
@@ -950,7 +1035,79 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
         elif status == "branches":
-            raise ValueError("Still not implemented")
+            solutionList = SolutionList()
+            input('here')
+            recursive_integration(solution, solutionList)
+            return solutionList
+        elif status == "terminated" or status == "failed":
+            raise ValueError(f"solution failed duo to {status}")
+
+        status = solution.update(onestep.one_step_CRK())
+        calls += onestep.number_of_calls
+        h = onestep.h_next
+        t = solution.t[-1]
+
+    return solution
+
+
+def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol=1e-7, Rtol=1e-7):
+    problem = Problem(f, alpha, phi, t_span, beta, phi_t, neutral=True)
+    solution = Solution(problem, discs=discs, neutral=True)
+    params = CRKParameters()
+    t, tf = problem.t_span
+
+    h = (np.max(Atol) ** (1 / 4)) * 0.1  # Initial stepsize
+    print("-" * 80)
+    print("Initial h:", h)
+    print("-" * 80)
+
+    onestep = RK4HHL(problem, solution, h, neutral=True)
+    branch_status = onestep.first_step_investigate_branch()
+
+    if branch_status == "one branch":
+        limit_direction = onestep.limit_direction
+        onestep.eta = lambda t: solution.eta(
+            t, limit_direction=limit_direction)
+    elif branch_status == "branches":
+        solutionList = SolutionList()
+        solution.limit_directions = onestep.limit_directions
+        recursive_integration(solution, solutionList)
+        return solutionList
+    elif branch_status == "terminated" or branch_status == "failed":
+        raise ValueError(f"solution failed duo to {branch_status}")
+
+    status = solution.update(onestep.one_step_CRK())
+    eta_t_left = solution.eta_t(t_span[0], limit_direction=[-1])
+    eta_t_right = solution.eta_t(t_span[0], limit_direction=[1])
+    if abs(eta_t_left - eta_t_right) >= 100*np.max(Atol):
+        solution.breaking_discs[t_span[0]] = {-1: eta_t_left, 1: eta_t_right}
+        print('solution.discs', solution.discs)
+        print('eta_t_left', eta_t_left)
+        print('eta_t_right', eta_t_right)
+
+    # WARN: We need to verify now if the first step is a breaking step
+
+    input('checking first step')
+
+    h = onestep.h_next
+    t = solution.t[-1]
+
+    times = []
+    calls = 0
+    while t < tf:
+        h = min(h, tf - t)
+        if status == "Success":
+            onestep = RK4HHL(problem, solution, h, neutral=True)
+        elif status == "one branch":
+            limit_direction = onestep.limit_direction
+            onestep = RK4HHL(problem, solution, h, neutral=True)
+            onestep.eta = lambda t: solution.eta(
+                t, limit_direction=limit_direction)
+        elif status == "branches":
+            solutionList = SolutionList()
+            input('here')
+            recursive_integration(solution, solutionList)
+            return solutionList
         elif status == "terminated" or status == "failed":
             raise ValueError(f"solution failed duo to {status}")
 
