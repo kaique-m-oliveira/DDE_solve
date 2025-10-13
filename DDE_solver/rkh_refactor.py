@@ -242,6 +242,7 @@ class RungeKutta:
         def d_zeta(t):
             return delay(t, eta(t))[idx] - old_disc
 
+        print("is true disc", d_zeta(a)*d_zeta(b) < 0)
         if d_zeta(a)*d_zeta(b) < 0:
             return True
         else:
@@ -460,8 +461,7 @@ class RungeKutta:
         self.y_tilde = self.y[0] + self.h * (self.b_err @ K)
 
     def discrete_disc_satistied(self):
-        sc = self.Atol + \
-            np.maximum(np.abs(self.y[1]), np.abs(self.y_tilde))*self.Rtol
+        sc = self.Atol + self.y[0]*self.Rtol
 
         self.disc_local_error = (
             np.linalg.norm(
@@ -478,7 +478,7 @@ class RungeKutta:
         tn, h = self.t[0], self.h
         val1 = self.new_eta[0](tn + h/2)
         val2 = self.new_eta[1](tn + h/2)
-        sc = self.Atol + np.maximum(np.abs(val1), np.abs(val2))*self.Rtol
+        sc = self.Atol + self.y[0]*self.Rtol
 
         self.uni_local_error = (
             np.linalg.norm((val1 - val2)/sc)/np.sqrt(self.ndim)
@@ -523,7 +523,6 @@ class RungeKutta:
         self.h_next = self.h * \
             min(facmax, max(facmin, min(fac*(1/err1) **
                 (1/pp + 1), fac*(1/err2)**(1/qq + 1))))
-
         # print('disc err = ', self.disc_local_error, 'uni err', self.uni_local_error)
 
         if not discrete_disc_satisfied or not uniform_disc_satistied:
@@ -915,19 +914,19 @@ class Solution:
             self.etas.append(step.new_eta[1])
             self.etas_t.append(step.new_eta_t[1])
 
-        if step.disc:
-            self.discs.append(step.disc)
-            if step.breaking_step:
-                progress = step.investigate_branches()
-                if progress == "terminated":
-                    return "terminated"
-                elif progress == "one branch":
-                    return "one branch"
-                elif progress == "branches":
-                    self.limit_directions = step.limit_directions
-                    return "branches"
+            if step.disc:
+                self.discs.append(step.disc)
+                if step.breaking_step:
+                    progress = step.investigate_branches()
+                    if progress == "terminated":
+                        return "terminated"
+                    elif progress == "one branch":
+                        return "one branch"
+                    elif progress == "branches":
+                        self.limit_directions = step.limit_directions
+                        return "branches"
 
-        if not success:
+        else:
             return "Failed"
 
         return "Success"
