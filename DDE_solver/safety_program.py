@@ -358,8 +358,6 @@ class RungeKutta:
         theta = theta ** np.arange(pol_order)
         K = self.K[0:self.n_stages["continuous_err_est_method"]]
         bs = (self.D_err @ theta).squeeze()
-        print('bs', bs)
-        print('K', K)
         eta0 = yn + h * bs @ K
 
         return eta0
@@ -712,109 +710,6 @@ class RungeKutta:
         return None
 
 
-
-
-class RK3C(RungeKutta):
-    A = np.array([
-        [0, 0, 0, 0],
-        [1/2, 0, 0, 0],
-        [0, 3/4, 0, 0],
-        [2/9, 1/3, 4/9, 0]
-    ], dtype=np.float64)
-
-    b = np.array([2/9, 1/3, 4/9], dtype=np.float64)
-    b_err = np.array([7/24, 1/4, 1/3, 1/8], dtype=np.float64)
-    c = np.array([0, 1/2, 3/4, 1], dtype=np.float64)
-
-    D = np.array([
-        [0.0, 1.0, -4/3,  5/9],     # d1(theta) = theta - 4/3 theta^2 + 5/9 theta^3
-        [0.0, 0.0,  1.0, -2/3],     # d2(theta) = theta^2 - 2/3 theta^3
-        [0.0, 0.0,  4/3, -8/9],     # d3(theta) = 4/3 theta^2 - 8/9 theta^3
-        [0.0, 0.0, -1.0,  1.0]      # d4(theta) = -theta^2 + theta^3
-        ], dtype=np.float64)
-
-    D_err = D
-    D_ovl = D
-
-    order = {
-        "discrete_method": 3,
-        "discrete_err_est_method": 2,
-        "continuous_method": 3,
-        "continuous_err_est_method": 3,
-        "continuous_ovl_method": 3
-    }
-
-    n_stages = {
-        "discrete_method": 3,
-        "discrete_err_est_method": 4,
-        "continuous_method": 4,
-        "continuous_err_est_method": 4,
-        "continuous_ovl_method": 4
-    }
-
-
-class DormandPrince54(RungeKutta):
-    A = np.array([
-        [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [1/5, 0, 0, 0, 0, 0, 0, 0, 0],
-        [3/40, 9/40, 0, 0, 0, 0, 0, 0, 0],
-        [44/45, -56/15, 32/9, 0, 0, 0, 0, 0, 0],
-        [19372/6561, -25360/2187, 64448/6561, -212/729, 0, 0, 0, 0, 0],
-        [9017/3168, -355/33, 46732/5247, 49/176, -5103/18656, 0, 0, 0, 0],
-        [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0, 0, 0],
-        [-33728713/104693760, 2, -30167461/21674880, 7739027/17448960, -19162737/123305984, 0, -26949/363520, 0, 0],
-        [7157/75776, 0, 70925/164724, 10825/113664, -220887/4016128, 80069/3530688, -107/5254, -5/74, 0]
-        ], dtype=np.float64)
-
-    b = np.array([35/384, 0, 500/1113, 125/192, -2187/6784, 11/84], dtype=np.float64)
-
-    b_err = np.array([5179/57600, 0, 7571/16695, 393/640, -92097/339200, 187/2100, 1/40], dtype=np.float64)
-
-    c = np.array([0, 1/5, 3/10, 4/5, 8/9, 1, 1, 1/2, 1/2], dtype=np.float64)
-
-    D = np.array([
-        [0, 1, -6839/1776, 24433/3552, -81685/14208, 29/16],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 413200/41181, -398800/13727, 1245700/41181, -4000/371],
-        [0, 0, 225/37, -44725/1776, 83775/2368, -125/8],
-        [0, 0, -98415/31376, 798255/62752, -4428675/251008, 6561/848],
-        [0, 0, 23529/18389, -285659/55167, 527571/73556, -22/7],
-        [0, 0, -3483/2627, 14847/2627, -21872/2627, 4],
-        [0, 0, -40/37, 80/37, -40/37, 0],
-        [0, 0, -8, 32, -40, 16]
-        ], dtype=np.float64)
-
-    D_err = np.array([
-        [0, 1, -4034104133/1410260304, 105330401/33982176, -13107642775/11282082432, 6542295/470086768],
-        [0, 0, 0, 0, 0, 0],
-        [0, 0, 132343189600/32700410799, -833316000/131326951, 91412856700/32700410799, -523383600/10900136933],
-        [0, 0, -115792950/29380423, 185270875/16991088, -12653452475/1880347072, 98134425/235043384],
-        [0, 0, 70805911779/24914598704, -4531260609/600351776, 988140236175/199316789632, -14307999165/24914598704],
-        [0, 0, -331320693/205662961, 31361737/7433601, -2426908385/822651844, 97305120/205662961],
-        [0, 0, 44764047/29380423, -1532549/353981, 90730570/29380423, -8293050/29380423]
-    ], dtype=np.float64)
-
-    D_ovl = D_err
-
-    order = {
-        "discrete_method": 5,
-        "discrete_err_est_method": 4,
-        "continuous_method": 4,
-        "continuous_err_est_method": 4,
-        "continuous_ovl_method": 4
-    }
-
-    n_stages = {
-        "discrete_method": 6,
-        "discrete_err_est_method": 7,   
-        "continuous_method": 9,   
-        "continuous_err_est_method": 7,
-        "continuous_ovl_method": 7
-    }
-
-
-
-
 class RK4HHL(RungeKutta):
     A = np.array([
         [0, 0, 0, 0, 0, 0, 0, 0],
@@ -1113,9 +1008,7 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
     print("Initial h:", h)
     print("-" * 80)
 
-    # onestep = RK4HHL(problem, solution, h, neutral)
-    # onestep = DormandPrince54(problem, solution, h, neutral)
-    onestep = RK3C(problem, solution, h, neutral)
+    onestep = RK4HHL(problem, solution, h, neutral)
     branch_status = onestep.first_step_investigate_branch()
 
     if branch_status == "one branch":
@@ -1140,14 +1033,10 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
     while t < tf:
         h = min(h, tf - t)
         if status == "Success":
-            # onestep = RK4HHL(problem, solution, h, neutral)
-            # onestep = DormandPrince54(problem, solution, h, neutral)
-            onestep = RK3C(problem, solution, h, neutral)
+            onestep = RK4HHL(problem, solution, h, neutral)
         elif status == "one branch":
             limit_direction = onestep.limit_direction
-            # onestep = RK4HHL(problem, solution, h, neutral)
-            # onestep = DormandPrince54(problem, solution, h, neutral)
-            onestep = RK3C(problem, solution, h, neutral)
+            onestep = RK4HHL(problem, solution, h, neutral)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
         elif status == "branches":
@@ -1177,9 +1066,7 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
     print("Initial h:", h)
     print("-" * 80)
 
-    # onestep = RK4HHL(problem, solution, h, neutral=True)
-    # onestep = DormandPrince54(problem, solution, h, neutral=True)
-    onestep = RK3C(problem, solution, h, neutral=True)
+    onestep = RK4HHL(problem, solution, h, neutral=True)
     branch_status = onestep.first_step_investigate_branch()
 
     if branch_status == "one branch":
@@ -1215,14 +1102,10 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
     while t < tf:
         h = min(h, tf - t)
         if status == "Success":
-            # onestep = RK4HHL(problem, solution, h, neutral=True)
-            # onestep = DormandPrince54(problem, solution, h, neutral=True)
-            onestep = RK3C(problem, solution, h, neutral=True)
+            onestep = RK4HHL(problem, solution, h, neutral=True)
         elif status == "one branch":
             limit_direction = onestep.limit_direction
-            # onestep = RK4HHL(problem, solution, h, neutral=True)
-            # onestep = DormandPrince54(problem, solution, h, neutral=True)
-            onestep = RK3C(problem, solution, h, neutral=True)
+            onestep = RK4HHL(problem, solution, h, neutral=True)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
         elif status == "branches":
