@@ -1,5 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
 from DDE_solver.rkh_refactor import *
 
 
@@ -39,16 +40,20 @@ t_span = [0, 10]
 
 discs = [(0, 1, 0)]
 
-solver = solve_dde(f, alpha, phi, t_span, discs=discs)
+Tol = 1e-7
+Atol = Tol
+Rtol = Tol
+solution = solve_dde(f, alpha, phi, t_span, discs=discs, Atol=Atol, Rtol = Rtol)
 tt = np.linspace(t_span[0], t_span[1], 100)
 realsol = np.array([real_sol(t) for t in tt])
-sol = np.array([solver.eta(i) for i in tt])
+sol = np.array([solution.eta(i) for i in tt])
 # for i in range(len(tt)):
 #     print(tt[i], realsol[i] - sol[i])
 print("max", np.max(abs(sol - realsol)))
-solution = np.array([real_sol(t) for t in solver.t])
-print('adnaed', np.max(np.squeeze(solver.y) - np.squeeze(solution)))
+realsolution = np.array([real_sol(t) for t in solution.t])
+print('adnaed', np.max(np.squeeze(solution.y) - np.squeeze(realsolution)))
 
+input(f'discs = {solution.discs}')
 
 plt.plot(tt, realsol, color="red", label='real solution')
 plt.plot(tt, sol, color="blue", label='aproxx')

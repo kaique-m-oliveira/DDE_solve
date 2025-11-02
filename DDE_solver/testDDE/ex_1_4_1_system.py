@@ -7,6 +7,7 @@
 # from DDE_solver.rkh_vectorize import *
 # from DDE_solver.rkh_multiple_delays import *
 from DDE_solver.rkh_refactor import *
+
 # from DDE_solver.solve_dde import *
 # from DDE_solver.rkh_NDDE import *
 
@@ -14,6 +15,7 @@ from DDE_solver.rkh_refactor import *
 
 
 def f(t, y, yq):
+    print('y val', y)
     y1, y2 = y
     yq1, yq2 = yq
     x1 = yq1 + y2

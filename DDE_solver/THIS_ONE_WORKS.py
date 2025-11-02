@@ -11,70 +11,7 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import minimize, minimize_scalar, root
 
 
-def get_initial_step(problem, solution, Atol, Rtol, order, neutral = False):
-    f, alpha = problem.f, problem.alpha
-    t0, y0 = solution.t[0], solution.y[0]
-    max_step = problem.t_span[-1]
-    ndim = problem.ndim
-    alpha0 = alpha(t0, y0)
-    eta = solution.eta
-
-    Atol = np.full(y0.shape, Atol)
-    Rtol = np.full(y0.shape, Rtol)
-    scale = Atol + np.abs(y0)*Rtol
-
-    if neutral:
-        beta = problem.beta
-        beta0 = beta(t0, y0)
-
-    def norm(x):
-        return np.linalg.norm(x)/np.sqrt(ndim)
-
-    if not neutral:
-        f0 = f(t0, y0, eta(alpha0))
-    else:
-        f0 = f(t0, y0, eta(alpha0), eta(beta0))
-
-    d0 = norm(y0 / scale)
-    d1 = norm(f0 / scale)
-
-    if d0 < 1e-5 or d1 < 1e-5:
-        h0 = 1e-6
-    else:
-        h0 = 0.01 * d0 / d1
-
-    y1 = y0 + h0 * f0
-    alpha1 = alpha(t0 + h0, y1)
-    if np.all(alpha1 <= t0):
-        eta_alpha1 = eta(alpha1)
-    else:
-        eta_alpha1 = y0 + ((alpha1 - t0)/h0)*(y1 - y0)
-
-    if not neutral:
-        f1 = f(t0 + h0, y1, eta_alpha1)
-    else:
-
-        beta1 = beta(t0 + h0, y1)
-        if np.all(beta1 <= t0):
-            eta_beta1 = eta(beta1)
-        else:
-            eta_beta1 = y0 + ((beta1 - t0)/h0)*(y1 - y0)
-
-        f1 = f(t0 + h0, y1, eta_alpha1, eta_beta1)
-
-    d2 = norm((f1 - f0) / scale) / h0
-
-    if d1 <= 1e-15 and d2 <= 1e-15:
-        h1 = max(1e-6, h0 * 1e-3)
-    else:
-        h1 = (0.01 / max(d1, d2)) ** (1 / (order + 1))
-
-    return min(100 * h0, h1, max_step)
-
-
-
-def bisection_method(f, a, b, TOL):
-    # print(f'old a = {a}, b  = {b}, tol = {TOL}')
+def bisection_method(f, a, b, TOL=1e-8):
     fa, fb = f(a), f(b)
     while (b - a)/2 > TOL:
         c = (a + b)/2
@@ -91,14 +28,13 @@ def bisection_method(f, a, b, TOL):
             a = c
             fa = fc
 
-    # input(f'new a = {a}, b  = {b}, tol = {TOL}')
     return [a, b]
 
 
 @dataclass
 class CRKParameters:
     theta1: float = 1 / 3
-    # TOL: float = 1e-7
+    TOL: float = 1e-7
     rho: float = 0.9
     omega_min: float = 0.5  # was 0.5
     omega_max: float = 1.2  # between 1.5 and 5
@@ -199,10 +135,8 @@ class RungeKutta:
         self.store_times = []
         self.number_of_calls = 0
         self.neutral = neutral
-        # self.Atol = np.full(self.y[0].shape, Atol)
-        # self.Rtol = np.full(self.y[0].shape, Rtol)
-        self.Atol = problem.Atol
-        self.Rtol = problem.Rtol
+        self.Atol = np.full(self.y[0].shape, Atol)
+        self.Rtol = np.full(self.y[0].shape, Rtol)
         self.first_eta = True
         self.disc_position = False
         self.disc_beta_positions = False
@@ -302,7 +236,7 @@ class RungeKutta:
 
             # We only need to check one disc
             self.disc_interval = bisection_method(
-                d_zeta, a, b, TOL= np.min(self.Atol))
+                d_zeta, a, b, TOL=np.max(self.Atol))
             self.old_disc = old_disc
             self.disc_delay_and_idx = (delay, idx)
             return
@@ -732,7 +666,6 @@ class RungeKutta:
         if self.disc is None:
             return None
         print('===================== INVESTIGATE ===========================')
-        print(f't = {self.t[0] + self.h}')
         disc = self.disc
         f = self.problem.f
         alpha = self.problem.alpha
@@ -773,12 +706,6 @@ class RungeKutta:
                 y_lim = y1 + eps * \
                     f(t1, y1, eta(alpha1, limit_direction=limit_direction))
 
-                print('t1', t1)
-                print('y1', y1)
-                print('eta(alpha)', eta(alpha1, limit_direction=limit_direction))
-                print('y_lim', y_lim)
-                print('t1 + eps', t1+eps)
-                print('alpha', -1*limit_direction *(alpha(t1 + eps, y_lim) - old_disc) )
                 continued = -1*limit_direction * \
                     (alpha(t1 + eps, y_lim) - old_disc) < 0
                 mask = np.array(alpha_limits.astype(bool))
@@ -797,7 +724,6 @@ class RungeKutta:
                 continued = -1*limit_direction * \
                     (alpha(t1 + eps, y_lim) - old_disc) < 0
                 mask = np.array(alpha_limits.astype(bool))
-                print('y_lim', y_lim)
 
                 continued = continued[mask]
                 continuation.append(continued)
@@ -808,7 +734,7 @@ class RungeKutta:
         print('counting steps', Counting.steps)
         print('counting fails', Counting.fails)
         print('continuation', continuation)
-        input(f'ever here? t = {t1}')
+        # input(f'ever here? t = {self.t[0]}')
         if not np.any(np.all(continuation, axis=1)):
             return "terminated"
 
@@ -1027,7 +953,7 @@ class RK4HHL(RungeKutta):
 
 
 class Problem:
-    def __init__(self, f, alpha, phi, t_span, Atol, Rtol, beta=False, phi_t=False, neutral=False):
+    def __init__(self, f, alpha, phi, t_span,  beta=False, phi_t=False, neutral=False):
         ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span, beta, phi_t = validade_arguments(
             f, alpha, phi, t_span,  beta=beta, phi_t=phi_t)
         self.t_span = np.array(t_span)
@@ -1036,8 +962,7 @@ class Problem:
         self.beta, self.phi_t = beta, phi_t
         self.y_type = np.zeros(self.ndim, dtype=float).dtype
         self.neutral = neutral
-        self.Atol = np.full(ndim, Atol)
-        self.Rtol = np.full(ndim, Rtol)
+        self.TOL = 1e-7
 
 
 class Solution:
@@ -1254,7 +1179,7 @@ def integrate_branch(solution, limit_direction):
             return "branches", solution
 
         elif status == "terminated" or status == "failed":
-            raise ValueError(f"solution failed duo to {status} at t = {solution.t[-1]}")
+            raise ValueError(f"solution failed duo to {status}")
 
         status = solution.update(onestep.one_step_CRK())
         calls += onestep.number_of_calls
@@ -1263,18 +1188,14 @@ def integrate_branch(solution, limit_direction):
     return "Success", solution
 
 
-def solve_dde(f, alpha, phi, t_span, method='RK45', Atol = 1e-7, Rtol = 1e-7, neutral=False, beta=None, d_phi=None, discs=[]):
-    problem = Problem(f, alpha, phi, t_span, Atol, Rtol, beta=beta,
+def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_phi=None, discs=[]):
+    problem = Problem(f, alpha, phi, t_span, beta=beta,
                       phi_t=d_phi, neutral=neutral)
     solution = Solution(problem, discs=discs, neutral=neutral)
     params = CRKParameters()
     t, tf = problem.t_span
 
-
-    # h = (np.min(Atol)** (1 / 4)) * 0.1  # Initial stepsize
-    order = 5
-    h = get_initial_step(problem, solution, Atol, Rtol, order, neutral = neutral)
-    # h = 1e-3
+    h = (params.TOL ** (1 / 4)) * 0.1  # Initial stepsize
     print("-" * 80)
     print("Initial h:", h)
     print("-" * 80)
@@ -1324,8 +1245,7 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', Atol = 1e-7, Rtol = 1e-7, ne
         elif status == "terminated" or status == "failed":
             print('Counting.steps', Counting.steps)
             print('Counting.fails', Counting.fails)
-            print('Counting.fnc_calls', Counting.fnc_calls)
-            raise ValueError(f"solution failed duo to {status} at t = {solution.t[-1]}")
+            raise ValueError(f"solution failed duo to {status}")
 
         status = solution.update(onestep.one_step_CRK())
         calls += onestep.number_of_calls
@@ -1343,7 +1263,6 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
     t, tf = problem.t_span
 
     h = (np.max(Atol) ** (1 / 4))  # Initial stepsize
-    # input(f'Atol Rtol', problem.Atol, problem.Rtol)
     print("-" * 80)
     print("Initial h:", h)
     print("-" * 80)
@@ -1401,7 +1320,7 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
             recursive_integration(solution, solutionList)
             return solutionList
         elif status == "terminated" or status == "failed":
-            raise ValueError(f"solution failed duo to {status} at t = {solution.t[-1]}")
+            raise ValueError(f"solution failed duo to {status}")
 
 
 

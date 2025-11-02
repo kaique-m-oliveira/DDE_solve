@@ -2,6 +2,23 @@
 from rkh_refactor import *
 
 
+def get_initial_step(problem, solution, neutral = False):
+    f, alpha = problem.f, problem.alpha
+    t0, y0 = solution.t[0], solution.y[0]
+    sc = problem.Atol + np.abs(y0)*problem.Rtol
+    ndim = problem.ndim
+    alpha0 = alpha(t0, y0)
+    if neutral:
+        beta = problem.beta
+
+    def norm(x):
+        return np.linalg.norm(x/sc)/np.sqrt(ndim)
+
+    if not neutral:
+        f0 = f(t0, y0, alpha0)
+        d0 = norm(y0)
+        d1 = norm(f0)
+
 class RK45(RungeKutta):
     # Dormand–Prince RK5(4) with continuous extension
 
