@@ -1,4 +1,5 @@
 import numpy as np
+
 from DDE_solver.rkh_refactor import *
 
 
@@ -18,6 +19,10 @@ t_span = [0, 3]
 discs = [(-1, 9/2, -1/2)]
 
 solver = solve_dde(f, alpha, phi, t_span, discs=discs)
+
+print('Counting steps', Counting.steps)
+print('Counting fails', Counting.fails)
+
 plt.plot(solver.t, solver.y, color="blue", label='aproxx')
 plt.legend()
 plt.show()

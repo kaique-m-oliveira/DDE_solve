@@ -3,9 +3,11 @@
 # from DDE_solver.rkh_testing import *
 # from DDE_solver.rkh import *
 import numpy as np
+
 # from DDE_solver.rkh_vectorize import *
 # from DDE_solver.rkh_multiple_delays import *
 from DDE_solver.rkh_refactor import *
+
 # from DDE_solver.rkh_refactor_before_chatgpt import *
 # from DDE_solver.rkh_state_complete import *
 # from DDE_solver.rkh_NDDE import *
@@ -66,6 +68,12 @@ print('adnaed', np.max(np.squeeze(solver.y) - np.squeeze(solution)))
 
 print('sol', len(sol))
 print('realsol', len(realsol))
+
+print('==========Counting============')
+print('number of steps: ', Counting.steps)
+print('number of fails: ', Counting.fails)
+print('number of fnc calls: ', Counting.fnc_calls)
+
 plt.plot(tt, realsol, color="red", label='real solution')
 plt.plot(tt, sol, color="blue", label='aproxx')
 plt.legend()

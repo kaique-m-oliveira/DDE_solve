@@ -1,3 +1,4 @@
+
 import numbers
 import random
 import time
@@ -33,7 +34,6 @@ def bisection_method(f, a, b, TOL=1e-8):
 
 @dataclass
 class CRKParameters:
-    theta1: float = 1 / 3
     TOL: float = 1e-7
     rho: float = 0.9
     omega_min: float = 0.5  # was 0.5
@@ -87,12 +87,12 @@ def validade_arguments(f, alpha, phi, t_span, beta=False, phi_t=False):
 class Counting:
     steps = 0
     fails = 0
-    fnc_calls = 0
+    fnc_calls = 0 
 
 
 
 class RungeKutta:
-    def __init__(self, problem, solution, h, neutral=False, Atol=1e-8, Rtol=1e-8):
+    def __init__(self, problem, solution, h, neutral=False, Atol=1e-3, Rtol=1e-6):
 
         A: np.ndarray = NotImplemented
         b: np.ndarray = NotImplemented
@@ -497,54 +497,6 @@ class RungeKutta:
             return False
 
 
-    # def look_for_max(self):
-    #     # Define the function in terms of theta
-    #     def diff_norm(theta):
-    #         t_eval = self.t[0] + theta * self.h  # tn + θh
-    #         return np.linalg.norm(self.new_eta[0](t_eval) - self.new_eta[1](t_eval))
-    #     
-    #     # Find maximum over theta in [0,1]
-    #     result = minimize_scalar(lambda theta: -diff_norm(theta), 
-    #                            bounds=(0, 1), options={"xatol": 1e-12, "maxiter": 500},
-    #                            method='bounded')
-    #     
-    #     theta_max = result.x
-    #     max_value = diff_norm(theta_max)
-    #     t_max = self.t[0] + theta_max * self.h
-    #     input(f'Maximum at θ = {theta_max:.4f}, t = {t_max:.4f}, value = {max_value:.6f}')
-
-    def look_for_max(self, n_refinements=3):
-        def diff_norm(theta):
-            t_eval = self.t[0] + theta * self.h
-            return np.linalg.norm(self.new_eta[0](t_eval) - self.new_eta[1](t_eval))
-        
-        # Iterative refinement
-        search_range = (0, 1)
-        
-        for i in range(n_refinements):
-            theta_samples = np.linspace(search_range[0], search_range[1], 100)
-            norms = [diff_norm(theta) for theta in theta_samples]
-            best_idx = np.argmax(norms)
-            best_theta = theta_samples[best_idx]
-            
-            # Refine search range around current best
-            if i < n_refinements - 1:  # Don't refine on last iteration
-                span = (search_range[1] - search_range[0]) / 10
-                search_range = (max(0, best_theta - span), min(1, best_theta + span))
-        
-        # Final local optimization
-        result = minimize_scalar(lambda theta: -diff_norm(theta),
-                               bounds=(search_range[0], search_range[1]),
-                               method='bounded',
-                               options={'xatol': 1e-12})
-        
-        final_theta = result.x
-        final_max = diff_norm(final_theta)
-        
-        # input(f"Final maximum: θ = {final_theta:.10f}, value = {final_max:.10f}")
-
-
-
     def uniform_disc_satistied(self):
 
         tn, h = self.t[0], self.h
@@ -564,6 +516,7 @@ class RungeKutta:
             return False
 
     def try_step_CRK(self):
+
         print('______________________________________________________________')
         print('t = ', [self.t[0], self.t[0] + self.h], 'h = ', self.h)
         success = self.one_step_RK4()
@@ -734,7 +687,7 @@ class RungeKutta:
         print('counting steps', Counting.steps)
         print('counting fails', Counting.fails)
         print('continuation', continuation)
-        # input(f'ever here? t = {self.t[0]}')
+        input(f'ever here? t = {self.t[0]}')
         if not np.any(np.all(continuation, axis=1)):
             return "terminated"
 
@@ -1188,7 +1141,7 @@ def integrate_branch(solution, limit_direction):
     return "Success", solution
 
 
-def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_phi=None, discs=[]):
+def solve_dde(f, alpha, phi, t_span, method='RK45', Atol = 1e-8, Rtol = 1e-8, neutral=False, beta=None, d_phi=None, discs=[]):
     problem = Problem(f, alpha, phi, t_span, beta=beta,
                       phi_t=d_phi, neutral=neutral)
     solution = Solution(problem, discs=discs, neutral=neutral)
@@ -1201,7 +1154,7 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
     print("-" * 80)
 
     # onestep = RK4HHL(problem, solution, h, neutral)
-    onestep = DormandPrince54(problem, solution, h, neutral)
+    onestep = DormandPrince54(problem, solution, h, neutral, Atol = Atol, Rtol=Rtol)
     # onestep = RK3C(problem, solution, h, neutral)
     branch_status = onestep.first_step_investigate_branch()
 
@@ -1228,12 +1181,12 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
         h = min(h, tf - t)
         if status == "Success":
             # onestep = RK4HHL(problem, solution, h, neutral)
-            onestep = DormandPrince54(problem, solution, h, neutral)
+            onestep = DormandPrince54(problem, solution, h, neutral, Atol = Atol, Rtol=Rtol)
             # onestep = RK3C(problem, solution, h, neutral)
         elif status == "one branch":
             limit_direction = onestep.limit_direction
             # onestep = RK4HHL(problem, solution, h, neutral)
-            onestep = DormandPrince54(problem, solution, h, neutral)
+            onestep = DormandPrince54(problem, solution, h, neutral, Atol = Atol, Rtol=Rtol)
             # onestep = RK3C(problem, solution, h, neutral)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
@@ -1248,6 +1201,7 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
             raise ValueError(f"solution failed duo to {status}")
 
         status = solution.update(onestep.one_step_CRK())
+
         calls += onestep.number_of_calls
         h = onestep.h_next
         t = solution.t[-1]
@@ -1256,7 +1210,7 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_
 
 
 # def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_phi=None, discs=[]):
-def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol=1e-7, Rtol=1e-7):
+def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol=1e-8, Rtol=1e-8):
     problem = Problem(f, alpha, phi, t_span, beta, phi_t, neutral=True)
     solution = Solution(problem, discs=discs, neutral=True)
     params = CRKParameters()
