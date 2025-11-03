@@ -4,18 +4,28 @@ from DDE_solver.rkh_refactor import *
 
 
 def f(t, y, x):
-    return 0.2*x/(1+x**10) - 0.1*y
+    y1, y2 = y
+    x1, _ = x  # x = [y1(t - y2(t)), y2(t - y2(t))], but only x1 is used
+    dy1 = -2 * x1
+    dy2 = (abs(x1) - abs(y1)) / (1 + abs(x1))
+    return [dy1, dy2]
+
 
 def phi(t):
-    return 0.5
+    return [1.0, 0.5]
+
 
 def alpha(t, y):
-    return t - 14
+    y1, y2 = y
+    return t - y2
 
-# No analytical solution found 
+
+def real_sol(t):
+    # No known analytical solution
+    return [np.nan, np.nan]
 
 
-t_span = [0, 500]
+t_span = [0, 40]
 
 
 print(f'{'='*80}')

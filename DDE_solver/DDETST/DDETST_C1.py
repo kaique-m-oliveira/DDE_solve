@@ -4,18 +4,23 @@ from DDE_solver.rkh_refactor import *
 
 
 def f(t, y, x):
-    return 0.2*x/(1+x**10) - 0.1*y
+    return -2 * x * (1 - y**2)
+
 
 def phi(t):
     return 0.5
 
+
 def alpha(t, y):
-    return t - 14
-
-# No analytical solution found 
+    return t - 1 - abs(y)
 
 
-t_span = [0, 500]
+def real_sol(t):
+    # No closed-form analytical solution known for this problem
+    return None
+
+
+t_span = [0, 30]
 
 
 print(f'{'='*80}')

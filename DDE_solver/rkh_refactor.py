@@ -148,11 +148,6 @@ def validade_arguments(f, alpha, phi, t_span, beta=False, phi_t=False):
     phi_t = vectorize_func(phi_t)
     return ndim, n_state_delays, n_neutral_delays, f, alpha, phi, t_span, beta, phi_t
 
-class Counting:
-    steps = 0
-    fails = 0
-    fnc_calls = 0
-
 
 
 class RungeKutta:
@@ -259,7 +254,7 @@ class RungeKutta:
             beta = self.problem.beta
         discs = self.solution.discs
 
-        if h <= 1e-12:
+        if h <= 1e-15:
             return False
 
         def d_zeta(delay, t, disc):
@@ -313,11 +308,13 @@ class RungeKutta:
         old_disc = self.old_disc
         delay, idx = self.disc_delay_and_idx
 
+        
         def d_zeta(t):
             return delay(t, eta(t))[idx] - old_disc
 
         tol = 0
-        input(f"is true disc at ({a}, {b + tol}) {d_zeta(a)*d_zeta(b + tol) < 0}")
+        # print('discs', self.solution.discs)
+        # input(f"is true disc at ({a}, {b + tol}) {d_zeta(a)*d_zeta(b + tol) < 0}")
         if d_zeta(a)*d_zeta(b + tol) < 0:
             return True
         else:
@@ -330,16 +327,8 @@ class RungeKutta:
         n_stages = self.n_stages["discrete_method"]
         c = self.c[:n_stages]
         A = self.A[:n_stages, :n_stages]
-        if self.neutral:
-            self.K[0] = f(tn, yn, eta(alpha(tn, yn)),
-                          self.eta_t(self.problem.beta(tn, yn)))
-            Counting.fnc_calls += 1
-        else:
-            self.K[0] = f(tn, yn, eta(alpha(tn, yn)))
-            Counting.fnc_calls += 1
-        self.stages_calculated = 1
 
-        for i in range(1, n_stages):
+        for i in range(0, n_stages):
             ti = tn + c[i] * h
             yi = yn + h * (A[i][0:i] @ self.K[0: i])
 
@@ -360,7 +349,7 @@ class RungeKutta:
 
             if not self.neutral:
                 self.K[i] = f(ti, yi, Y_tilde)
-                Counting.fnc_calls += 1
+                self.solution.feval += 1
                 self.stages_calculated = i + 1
 
             else:
@@ -370,7 +359,7 @@ class RungeKutta:
                     Z_tilde = self.solution.eta_t(beta_i)
 
                 elif eta_t_ov is not None:
-                    Z_tilde = eta_ov(beta_i)
+                    Z_tilde = eta_t_ov(beta_i)
 
                 else:  # this would be the overlapping case
                     self.overlap = True
@@ -380,27 +369,36 @@ class RungeKutta:
                     break
 
                 self.K[i] = f(ti, yi, Y_tilde, Z_tilde)
-                Counting.fnc_calls += 1
+                self.solution.feval += 1
                 self.stages_calculated = i + 1
 
         self.y[1] = yn + h * (self.b @ self.K[0:n_stages])
         self.stages_calculated = n_stages
 
         if np.isnan(self.y[1]).any():
-            print('K', self.K)
-            print('shape', self.y[1].shape)
-            input(f'y1 {self.y[1]}')
+            # print('t = ', tn + h)
+            # print('K', self.K)
+            # print('shape', self.y[1].shape)
+            # input(f'y1 {self.y[1]}')
+            return False
 
         return True
 
     def fixed_point(self):
+        # print('K = ', self.K)
+        # print('discs', self.solution.discs)
+        # input(f'fixed point at t = {self.t[0] + self.h} with h = {self.h}')
+
+
         K = self.K[0:self.n_stages["discrete_method"]]
         self.one_step_RK4(eta_ov=self.eeta, eta_t_ov=self.eeta_t)
         self.first_eta = False
-        max_iter = 10
+        max_iter = 12
         for i in range(max_iter):
             self.one_step_RK4(eta_ov=self.eeta, eta_t_ov=self.eeta_t)
-            # if np.linalg.norm(K - self.K[0:self.n_stages["discrete_method"]]) <= 1e-7:
+            # if np.linalg.norm(K - self.K[0:self.n_stages["discrete_method"]]) <= 1e-9:
+            #     return True
+            # if np.max(np.abs(K - self.K[0:self.n_stages["discrete_method"]])) <= 1e-9:
             #     return True
             sc = self.Atol + np.abs(self.y[0])*self.Rtol
             errs = np.linalg.norm((K - self.K[0:self.n_stages["discrete_method"]])/sc, axis = 1/np.sqrt(self.ndim))
@@ -423,10 +421,10 @@ class RungeKutta:
                     beta_i = self.problem.beta(ti, yi)
                     Z_tilde = self.eeta_t(alpha_i)
                     self.K[i] = f(ti, yi, Y_tilde, Z_tilde)
-                    Counting.fnc_calls += 1
+                    self.solution.feval += 1
                 else:
                     self.K[i] = f(ti, yi, Y_tilde)
-                    Counting.fnc_calls += 1
+                    self.solution.feval += 1
             self.stages_calculated = self.n_stages["continuous_err_est_method"]
 
     def _eta_0(self, theta):
@@ -494,10 +492,10 @@ class RungeKutta:
                     beta_i = self.problem.beta(ti, yi)
                     Z_tilde = self.eeta_t(alpha_i)
                     self.K[i] = f(ti, yi, Y_tilde, Z_tilde)
-                    Counting.fnc_calls += 1
+                    self.solution.feval += 1
                 else:
                     self.K[i] = f(ti, yi, Y_tilde)
-                    Counting.fnc_calls += 1
+                    self.solution.feval += 1
             self.stages_calculated = self.n_stages["continuous_method"]
 
     def _eta_1(self, theta):
@@ -539,10 +537,10 @@ class RungeKutta:
                     beta_i = self.problem.beta(ti, yi)
                     Z_tilde = self.eeta_t(alpha_i)
                     self.K[i] = f(ti, yi, Y_tilde, Z_tilde)
-                    Counting.fnc_calls += 1
+                    self.solution.feval += 1
                 else:
                     self.K[i] = f(ti, yi, Y_tilde)
-                    Counting.fnc_calls += 1
+                    self.solution.feval += 1
 
             self.stages_calculated = self.n_stages["discrete_err_est_method"]
 
@@ -556,82 +554,46 @@ class RungeKutta:
             np.linalg.norm(
                 (self.y_tilde - self.y[1])/sc)/np.sqrt(self.ndim)
         )  # eq 7.3.4
-
+    
         if self.disc_local_error <= 1:
             return True
+
+        # self.disc_local_error = self.h*np.linalg.norm(self.y_tilde - self.y[1]) <= self.Atol[0]
+        # if self.disc_local_error <= self.Atol[0]:
+        #     return True
+
         else:
             return False
-
-
-    # def look_for_max(self):
-    #     # Define the function in terms of theta
-    #     def diff_norm(theta):
-    #         t_eval = self.t[0] + theta * self.h  # tn + θh
-    #         return np.linalg.norm(self.new_eta[0](t_eval) - self.new_eta[1](t_eval))
-    #     
-    #     # Find maximum over theta in [0,1]
-    #     result = minimize_scalar(lambda theta: -diff_norm(theta), 
-    #                            bounds=(0, 1), options={"xatol": 1e-12, "maxiter": 500},
-    #                            method='bounded')
-    #     
-    #     theta_max = result.x
-    #     max_value = diff_norm(theta_max)
-    #     t_max = self.t[0] + theta_max * self.h
-    #     input(f'Maximum at θ = {theta_max:.4f}, t = {t_max:.4f}, value = {max_value:.6f}')
-
-    def look_for_max(self, n_refinements=3):
-        def diff_norm(theta):
-            t_eval = self.t[0] + theta * self.h
-            return np.linalg.norm(self.new_eta[0](t_eval) - self.new_eta[1](t_eval))
-        
-        # Iterative refinement
-        search_range = (0, 1)
-        
-        for i in range(n_refinements):
-            theta_samples = np.linspace(search_range[0], search_range[1], 100)
-            norms = [diff_norm(theta) for theta in theta_samples]
-            best_idx = np.argmax(norms)
-            best_theta = theta_samples[best_idx]
-            
-            # Refine search range around current best
-            if i < n_refinements - 1:  # Don't refine on last iteration
-                span = (search_range[1] - search_range[0]) / 10
-                search_range = (max(0, best_theta - span), min(1, best_theta + span))
-        
-        # Final local optimization
-        result = minimize_scalar(lambda theta: -diff_norm(theta),
-                               bounds=(search_range[0], search_range[1]),
-                               method='bounded',
-                               options={'xatol': 1e-12})
-        
-        final_theta = result.x
-        final_max = diff_norm(final_theta)
-        
-        # input(f"Final maximum: θ = {final_theta:.10f}, value = {final_max:.10f}")
-
 
 
     def uniform_disc_satistied(self):
 
         tn, h = self.t[0], self.h
-        val1 = self.new_eta[0](tn + h/2)
-        val2 = self.new_eta[1](tn + h/2)
+        # val1 = self.new_eta[0](tn + h/3)
+        # val2 = self.new_eta[1](tn + h/3)
+
+        val1 = np.array([self.new_eta[0](tn + ci*h) for ci in self.c])
+        val2 = np.array([self.new_eta[1](tn + ci*h) for ci in self.c])
+
         sc = self.Atol + np.abs(self.y[0])*self.Rtol
 
-        # self.look_for_max()
 
         self.uni_local_error = (
-            np.linalg.norm((val1 - val2)/sc)/np.sqrt(self.ndim)
+            np.linalg.norm(np.max(val1 - val2)/sc)/np.sqrt(self.ndim)
         )  # eq 7.3.4
-
         if self.uni_local_error <= 1:
             return True
+
+        # self.uni_local_error = np.linalg.norm(self.y_tilde - self.y[1])/self.h <= self.Atol[0]
+        # if self.uni_local_error <= self.Atol[0]:
+        #     return True
+
         else:
             return False
 
     def try_step_CRK(self):
-        print('______________________________________________________________')
-        print('t = ', [self.t[0], self.t[0] + self.h], 'h = ', self.h)
+        # print('______________________________________________________________')
+        # print('t = ', [self.t[0], self.t[0] + self.h], 'h = ', self.h)
         success = self.one_step_RK4()
         if not success:
             self.h = self.h/2
@@ -663,19 +625,14 @@ class RungeKutta:
         self.h_next = self.h * \
             min(facmax, max(facmin, fac*min((1/err1) **
                 (1/pp + 1), (1/err2)**(1/qq + 1))))
-        # print('disc err = ', self.disc_local_error, 'uni err', self.uni_local_error)
 
         if not discrete_disc_satisfied or not uniform_disc_satistied:
             self.h = self.h_next
-            print(f'not sucessfull disc satisfied: {
-                  discrete_disc_satisfied} uni satisf: {uniform_disc_satistied}')
-            Counting.fails += 1
-            Counting.steps += 1
+            self.solution.steps += 1 
+            self.solution.fails += 1
             return False
 
-        err3 = np.linalg.norm(self.y[1] - self.y_tilde)/self.h
-
-        Counting.steps += 1
+        self.solution.steps += 1 
         return True
 
     def investigate_disc(self):
@@ -731,8 +688,8 @@ class RungeKutta:
     def investigate_branches(self):
         if self.disc is None:
             return None
-        print('===================== INVESTIGATE ===========================')
-        print(f't = {self.t[0] + self.h}')
+        # print('===================== INVESTIGATE ===========================')
+        # print(f't = {self.t[0] + self.h}')
         disc = self.disc
         f = self.problem.f
         alpha = self.problem.alpha
@@ -768,28 +725,28 @@ class RungeKutta:
 
 
             if not self.neutral:
-                print('limit_dir', limit_direction)
+                # print('limit_dir', limit_direction)
                 limit_directions.append(limit_direction)
                 y_lim = y1 + eps * \
                     f(t1, y1, eta(alpha1, limit_direction=limit_direction))
 
-                print('t1', t1)
-                print('y1', y1)
-                print('eta(alpha)', eta(alpha1, limit_direction=limit_direction))
-                print('y_lim', y_lim)
-                print('t1 + eps', t1+eps)
-                print('alpha', -1*limit_direction *(alpha(t1 + eps, y_lim) - old_disc) )
+                # print('t1', t1)
+                # print('y1', y1)
+                # print('eta(alpha)', eta(alpha1, limit_direction=limit_direction))
+                # print('y_lim', y_lim)
+                # print('t1 + eps', t1+eps)
+                # print('alpha', -1*limit_direction *(alpha(t1 + eps, y_lim) - old_disc) )
                 continued = -1*limit_direction * \
                     (alpha(t1 + eps, y_lim) - old_disc) < 0
                 mask = np.array(alpha_limits.astype(bool))
 
                 continued = continued[mask]
                 continuation.append(continued)
-                print('___________________________________________________')
+                # print('___________________________________________________')
 
             else:
                 eta_t = self.solution.eta_t
-                print('limit_dir', limit_direction)
+                # print('limit_dir', limit_direction)
                 limit_directions.append(limit_direction)
                 y_lim = y1 + eps * \
                     f(t1, y1, eta(alpha1, limit_direction=limit_direction), eta_t(alpha1 + limit_direction*10**-16, limit_direction=limit_direction) )
@@ -797,27 +754,21 @@ class RungeKutta:
                 continued = -1*limit_direction * \
                     (alpha(t1 + eps, y_lim) - old_disc) < 0
                 mask = np.array(alpha_limits.astype(bool))
-                print('y_lim', y_lim)
+                # print('y_lim', y_lim)
 
                 continued = continued[mask]
                 continuation.append(continued)
                 print('___________________________________________________')
 
-        print('all discs', self.solution.discs)
-        print('all breaking discs', self.solution.breaking_discs)
-        print('counting steps', Counting.steps)
-        print('counting fails', Counting.fails)
-        print('continuation', continuation)
-        input(f'ever here? t = {t1}')
         if not np.any(np.all(continuation, axis=1)):
             return "terminated"
 
         possible_branches = np.all(continuation, axis=1)
-        print('possible_branches', possible_branches)
+        # print('possible_branches', possible_branches)
         if sum(possible_branches) == 1:
             pos = np.where(possible_branches)[0][0]
             self.limit_direction = limit_directions[pos]
-            print('lit ditection', self.limit_direction)
+            # print('lit ditection', self.limit_direction)
             return "one branch"
         else:
             pos = np.where(possible_branches)[0].tolist()
@@ -849,8 +800,8 @@ class RungeKutta:
         if self.solution.breaking_discs:
             self.alpha_discs = np.full(self.problem.n_state_delays, None)
             alpha0 = self.problem.alpha(self.t[0], self.y[0])
-            print('alpha0', alpha0, 'shape', alpha0.shape)
-            print('breaking discs', self.solution.breaking_discs)
+            # print('alpha0', alpha0, 'shape', alpha0.shape)
+            # print('breaking discs', self.solution.breaking_discs)
 
             for i in range(self.problem.n_state_delays):
                 if self.ndim == 1:
@@ -872,7 +823,7 @@ class RungeKutta:
 
 
 
-class RKC2(RungeKutta):
+class RKC3(RungeKutta):
     A = np.array([
         [0, 0, 0, 0],
         [1/2, 0, 0, 0],
@@ -957,7 +908,7 @@ class RKC5(RungeKutta):
     order = {
         "discrete_method": 5,
         "discrete_err_est_method": 4,
-        "continuous_method": 4,
+        "continuous_method": 5,
         "continuous_err_est_method": 4,
         "continuous_ovl_method": 4
     }
@@ -1026,7 +977,7 @@ class RKC4(RungeKutta):
                 "continuous_method": 6, "continuous_err_est_method": 5, "continuous_ovl_method": 4}
 
 
-METHODS = {'RKC2': RKC2,
+METHODS = {'RKC3': RKC3,
            'RKC4': RKC4,
            'RKC5': RKC5}
 
@@ -1064,6 +1015,9 @@ class Solution:
         self.eta_t_calls = 0
         self.t_next = None
         self.neutral = neutral
+        self.steps = 0
+        self.fails = 0
+        self.feval = 0
 
     @property
     def eta(self, ov=False, limit_direction=None):
@@ -1122,8 +1076,8 @@ class Solution:
                     if ov:
                         results[i] = self.etas_t[-1](t[i])
                     else:
-                        print('Counting.steps', Counting.steps)
-                        print('Counting.fails', Counting.fails)
+                        print('steps', self.steps)
+                        print('fails', self.fails)
                         raise ValueError(
                             f"eta isn't defined in {t[i]}, only on {self.t[0], self.t[-1]}")
             return np.squeeze(results)
@@ -1236,7 +1190,6 @@ def integrate_branch(solution, limit_direction):
     neutral = solution.neutral
     h = (1e-7 ** (1 / 4)) * 0.1  # Initial stepsize
 
-    # WARN: first integration step will be a limit_direction integration
     onestep = RKC4(problem, solution, h, neutral)
     onestep.eta = lambda t: solution.eta(
         t, limit_direction=limit_direction)
@@ -1276,21 +1229,16 @@ def solve_dde(f, alpha, phi, t_span, method='RKC5', Atol = 1e-7, Rtol = 1e-7, ne
     t, tf = problem.t_span
 
 
+    print('methods', method)
     if method in METHODS:
         method = METHODS[method]
 
-
+    # input(f'method {method}')
     # h = (np.min(Atol)** (1 / 4)) * 0.1  # Initial stepsize
     order = 5
     h = get_initial_step(problem, solution, Atol, Rtol, order, neutral = neutral)
-    # h = 1e-3
-    print("-" * 80)
-    print("Initial h:", h)
-    print("-" * 80)
-
-    # onestep = RK4HHL(problem, solution, h, neutral)
     onestep = method(problem, solution, h, neutral)
-    # onestep = RK3C(problem, solution, h, neutral)
+
     branch_status = onestep.first_step_investigate_branch()
 
     if branch_status == "one branch":
@@ -1331,9 +1279,9 @@ def solve_dde(f, alpha, phi, t_span, method='RKC5', Atol = 1e-7, Rtol = 1e-7, ne
             recursive_integration(solution, solutionList)
             return solutionList
         elif status == "terminated" or status == "failed":
-            print('Counting.steps', Counting.steps)
-            print('Counting.fails', Counting.fails)
-            print('Counting.fnc_calls', Counting.fnc_calls)
+            print('steps', solution.steps)
+            print('fails', solution.fails)
+            print('feval', solution.feval)
             raise ValueError(f"solution failed duo to {status} at t = {solution.t[-1]}")
 
         status = solution.update(onestep.one_step_CRK())
@@ -1345,11 +1293,16 @@ def solve_dde(f, alpha, phi, t_span, method='RKC5', Atol = 1e-7, Rtol = 1e-7, ne
 
 
 # def solve_dde(f, alpha, phi, t_span, method='RK45', neutral=False, beta=None, d_phi=None, discs=[]):
-def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol=1e-7, Rtol=1e-7):
+def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RKC5', discs=[], Atol=1e-7, Rtol=1e-7):
     problem = Problem(f, alpha, phi, t_span, Atol = Atol, Rtol = Rtol, beta = beta, phi_t = phi_t, neutral=True)
     solution = Solution(problem, discs=discs, neutral=True)
     params = CRKParameters()
     t, tf = problem.t_span
+
+
+    if method in METHODS:
+        method = METHODS[method]
+    
 
     order = 5
     h = get_initial_step(problem, solution, Atol, Rtol, order, neutral = True)
@@ -1360,7 +1313,8 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
     print("-" * 80)
 
     # onestep = RK4HHL(problem, solution, h, neutral=True)
-    onestep = RKC5(problem, solution, h, neutral=True)
+    # onestep = RKC5(problem, solution, h, neutral=True)
+    onestep = method(problem, solution, h, neutral=True)
     # onestep = RK3C(problem, solution, h, neutral=True)
     branch_status = onestep.first_step_investigate_branch()
 
@@ -1397,12 +1351,14 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
         h = min(h, tf - t)
         if status == "Success":
             # onestep = RK4HHL(problem, solution, h, neutral=True)
-            onestep = RKC5(problem, solution, h, neutral=True)
+            # onestep = RKC5(problem, solution, h, neutral=True)
+            onestep = method(problem, solution, h, neutral=True)
             # onestep = RK3C(problem, solution, h, neutral=True)
         elif status == "one branch":
             limit_direction = onestep.limit_direction
             # onestep = RK4HHL(problem, solution, h, neutral=True)
-            onestep = RKC5(problem, solution, h, neutral=True)
+            onestep = method(problem, solution, h, neutral=True)
+            # onestep = RKC5(problem, solution, h, neutral=True)
             # onestep = RK3C(problem, solution, h, neutral=True)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
@@ -1412,9 +1368,9 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
             recursive_integration(solution, solutionList)
             return solutionList
         elif status == "terminated" or status == "failed":
-            print('Counting.steps', Counting.steps)
-            print('Counting.fails', Counting.fails)
-            print('Counting.fnc_calls', Counting.fnc_calls)
+            print('steps', solution.steps)
+            print('fails', solution.fails)
+            print('feval', solution.feval)
             raise ValueError(f"solution failed duo to {status} at t = {solution.t[-1]}")
 
 
@@ -1423,21 +1379,6 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
         calls += onestep.number_of_calls
         h = onestep.h_next
         t = solution.t[-1]
-
-        # eta_t_left = solution.eta_t(solution.t[-2] - 10**5* np.finfo(float).eps, limit_direction=[-1])
-        # eta_t_right = solution.eta_t(solution.t[-2] + 10**5*np.finfo(float).eps , limit_direction=[1])
-        # print('t = ', solution.t[-2])
-        # print('eta_t_left', eta_t_left)
-        # print('eta_t_right', eta_t_right)
-        # # input('difs')
-        # print('abs val', abs(eta_t_left - eta_t_right) >= 100*np.max(Atol))
-        # if abs(eta_t_left - eta_t_right) >= 100*np.max(Atol):
-        #     solution.breaking_discs[solution.t[-2]] = {-1: eta_t_left, 1: eta_t_right}
-        #     print('solution.discs', solution.discs)
-        #     print('eta_t_left', eta_t_left)
-        #     print('eta_t_right', eta_t_right)
-        #     print('solution.breaking_discs', solution.breaking_discs)
-        #     # input('added')
 
 
     return solution

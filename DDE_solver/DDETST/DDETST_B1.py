@@ -4,18 +4,20 @@ from DDE_solver.rkh_refactor import *
 
 
 def f(t, y, x):
-    return 0.2*x/(1+x**10) - 0.1*y
+    return 1 - x
 
 def phi(t):
-    return 0.5
+    return np.log(t)
 
 def alpha(t, y):
-    return t - 14
+    return np.exp(1 - 1/t)
 
-# No analytical solution found 
+def real_sol(t):
+    return np.log(t)
 
+t_span = [0.1, 10]
 
-t_span = [0, 500]
+print('alpha0', alpha(0.5, phi(0.5)))
 
 
 print(f'{'='*80}')
@@ -30,12 +32,27 @@ for method in methods:
     for Tol in tolerances:
         solution = solve_dde(f, alpha, phi, t_span, method = method, Atol=Tol, Rtol=Tol)
 
+        max_diff = 0
+        for i in range(len(solution.t) - 1):
+            tt = np.linspace(solution.t[i], solution.t[i + 1], 100)
+            sol = np.array([solution.eta(i) for i in tt])
+            realsol = np.array([real_sol(i) for i in tt])
+            max_diff = np.max(np.abs(realsol - sol))
+            if max_diff > max_diff:
+                max_diff = max_diff
+
+            yyy = np.array([real_sol(i) for i in solution.t])
+        
+        diff_points = np.max(np.abs(yyy - solution.y))
         print('==========Counting============')
         print(f'method = {method}')
         print(f'Tol = {Tol}')
         print('steps: ', solution.steps)
         print('fails: ', solution.fails)
         print('feval: ', solution.feval)
+        print('max diff', max_diff)
+        print('diff malha', diff_points)
+        diff_points = 0
         
 
 t_plot = np.linspace(t_span[0], t_span[-1], 1000)

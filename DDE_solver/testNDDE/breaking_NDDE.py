@@ -23,8 +23,8 @@ epsilon = 0
 t_span = [0.25, 4.1]
 
 
-Tol = 1e-7
-solver = solve_ndde(t_span, f, alpha, alpha, phi, phi_t, method='RK45', discs=[], Atol=Tol, Rtol=Tol)
+Tol = 1e-8
+solver = solve_ndde(t_span, f, alpha, alpha, phi, phi_t, method='RKC5', discs=[], Atol=Tol, Rtol=Tol)
 
 
 
