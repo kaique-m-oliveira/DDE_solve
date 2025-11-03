@@ -317,7 +317,7 @@ class RungeKutta:
             return delay(t, eta(t))[idx] - old_disc
 
         tol = 0
-        # input(f"is true disc at ({a}, {b + tol}) {d_zeta(a)*d_zeta(b + tol) < 0}")
+        input(f"is true disc at ({a}, {b + tol}) {d_zeta(a)*d_zeta(b + tol) < 0}")
         if d_zeta(a)*d_zeta(b + tol) < 0:
             return True
         else:
@@ -872,7 +872,7 @@ class RungeKutta:
 
 
 
-class RK3C(RungeKutta):
+class RKC2(RungeKutta):
     A = np.array([
         [0, 0, 0, 0],
         [1/2, 0, 0, 0],
@@ -911,7 +911,7 @@ class RK3C(RungeKutta):
     }
 
 
-class DormandPrince54(RungeKutta):
+class RKC5(RungeKutta):
     A = np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 0],
         [1/5, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -973,7 +973,7 @@ class DormandPrince54(RungeKutta):
 
 
 
-class RK4HHL(RungeKutta):
+class RKC4(RungeKutta):
     A = np.array([
         [0, 0, 0, 0, 0, 0, 0, 0],
         [1/2, 0, 0, 0, 0, 0, 0, 0],
@@ -1024,6 +1024,11 @@ class RK4HHL(RungeKutta):
 
     n_stages = {"discrete_method": 4, "discrete_err_est_method": 8,
                 "continuous_method": 6, "continuous_err_est_method": 5, "continuous_ovl_method": 4}
+
+
+METHODS = {'RKC2': RKC2,
+           'RKC4': RKC4,
+           'RKC5': RKC5}
 
 
 class Problem:
@@ -1232,7 +1237,7 @@ def integrate_branch(solution, limit_direction):
     h = (1e-7 ** (1 / 4)) * 0.1  # Initial stepsize
 
     # WARN: first integration step will be a limit_direction integration
-    onestep = RK4HHL(problem, solution, h, neutral)
+    onestep = RKC4(problem, solution, h, neutral)
     onestep.eta = lambda t: solution.eta(
         t, limit_direction=limit_direction)
 
@@ -1242,11 +1247,11 @@ def integrate_branch(solution, limit_direction):
     while t < tf:
         h = min(h, tf - t)
         if status == "Success":
-            onestep = RK4HHL(problem, solution, h, neutral)
+            onestep = RKC4(problem, solution, h, neutral)
 
         elif status == "one branch":
             limit_direction = onestep.limit_direction
-            onestep = RK4HHL(problem, solution, h, neutral)
+            onestep = RKC4(problem, solution, h, neutral)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
 
@@ -1263,12 +1268,16 @@ def integrate_branch(solution, limit_direction):
     return "Success", solution
 
 
-def solve_dde(f, alpha, phi, t_span, method='RK45', Atol = 1e-7, Rtol = 1e-7, neutral=False, beta=None, d_phi=None, discs=[]):
+def solve_dde(f, alpha, phi, t_span, method='RKC5', Atol = 1e-7, Rtol = 1e-7, neutral=False, beta=None, d_phi=None, discs=[]):
     problem = Problem(f, alpha, phi, t_span, Atol, Rtol, beta=beta,
                       phi_t=d_phi, neutral=neutral)
     solution = Solution(problem, discs=discs, neutral=neutral)
     params = CRKParameters()
     t, tf = problem.t_span
+
+
+    if method in METHODS:
+        method = METHODS[method]
 
 
     # h = (np.min(Atol)** (1 / 4)) * 0.1  # Initial stepsize
@@ -1280,7 +1289,7 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', Atol = 1e-7, Rtol = 1e-7, ne
     print("-" * 80)
 
     # onestep = RK4HHL(problem, solution, h, neutral)
-    onestep = DormandPrince54(problem, solution, h, neutral)
+    onestep = method(problem, solution, h, neutral)
     # onestep = RK3C(problem, solution, h, neutral)
     branch_status = onestep.first_step_investigate_branch()
 
@@ -1307,12 +1316,12 @@ def solve_dde(f, alpha, phi, t_span, method='RK45', Atol = 1e-7, Rtol = 1e-7, ne
         h = min(h, tf - t)
         if status == "Success":
             # onestep = RK4HHL(problem, solution, h, neutral)
-            onestep = DormandPrince54(problem, solution, h, neutral)
+            onestep = method(problem, solution, h, neutral)
             # onestep = RK3C(problem, solution, h, neutral)
         elif status == "one branch":
             limit_direction = onestep.limit_direction
             # onestep = RK4HHL(problem, solution, h, neutral)
-            onestep = DormandPrince54(problem, solution, h, neutral)
+            onestep = method(problem, solution, h, neutral)
             # onestep = RK3C(problem, solution, h, neutral)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)
@@ -1351,7 +1360,7 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
     print("-" * 80)
 
     # onestep = RK4HHL(problem, solution, h, neutral=True)
-    onestep = DormandPrince54(problem, solution, h, neutral=True)
+    onestep = RKC5(problem, solution, h, neutral=True)
     # onestep = RK3C(problem, solution, h, neutral=True)
     branch_status = onestep.first_step_investigate_branch()
 
@@ -1388,12 +1397,12 @@ def solve_ndde(t_span, f, alpha, beta, phi, phi_t, method='RK45', discs=[], Atol
         h = min(h, tf - t)
         if status == "Success":
             # onestep = RK4HHL(problem, solution, h, neutral=True)
-            onestep = DormandPrince54(problem, solution, h, neutral=True)
+            onestep = RKC5(problem, solution, h, neutral=True)
             # onestep = RK3C(problem, solution, h, neutral=True)
         elif status == "one branch":
             limit_direction = onestep.limit_direction
             # onestep = RK4HHL(problem, solution, h, neutral=True)
-            onestep = DormandPrince54(problem, solution, h, neutral=True)
+            onestep = RKC5(problem, solution, h, neutral=True)
             # onestep = RK3C(problem, solution, h, neutral=True)
             onestep.eta = lambda t: solution.eta(
                 t, limit_direction=limit_direction)

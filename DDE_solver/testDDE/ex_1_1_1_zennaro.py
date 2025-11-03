@@ -40,22 +40,18 @@ def real_sol(t):
 t_span = [0, 3]
 
 
-solver = solve_dde(f, alpha, phi, t_span)
-
-# solver.f_y = lambda t, y, x: 0
-# solver.f_x = lambda t, y, x: -1
-# solver.alpha_t = lambda t, y: 1
-# solver.alpha_y = lambda t, y: 0
-# solver.phi_t = lambda t: 0
-# solver.etas_t.append(lambda t: 0)
+method = 'RKC2'
+# method = 'RKC4'
+# method = 'RKC5'
+Tol = 1e-3
+solver = solve_dde(f, alpha, phi, t_span, method=method, Atol=Tol, Rtol=Tol)
 
 print(f'{'='*80}')
 print('ex 1_1_1_zenaro.py')
-tt = np.linspace(t_span[0], t_span[1], 100)
+tt = np.linspace(t_span[0], t_span[1], 1000)
 realsol = np.array([real_sol(t) for t in tt])
 sol = [solver.eta(i) for i in tt]
-# for i in range(len(tt)):
-#     print(tt[i], realsol[i] - sol[i])
+
 print("max", np.max(np.abs(np.squeeze(sol) - np.squeeze(realsol))))
 print('___________________________________________________')
 print('solver.t', solver.t)
