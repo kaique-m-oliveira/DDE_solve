@@ -3,11 +3,26 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dde_solve"
-version = "0.1"
-description = "DDE solver"
-authors = [{name = "Kaique Oliveira"}]
-license = "MIT"
+name = "dde-solve"  # this is the PyPI package name
+version = "0.1.0"
+description = "Numerical solver for delay differential equations (DDEs)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+    { name="Kaique Oliveira", email="your_email@example.com" }
+]
+keywords = ["dde", "delay differential equations", "numerical methods"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+]
 
-[tool.setuptools]
-packages = ["DDE_solver"]
+dependencies = [
+    "numpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/kaique-m-oliveira/DDE_solve"
+Repository = "https://github.com/kaique-m-oliveira/DDE_solve"

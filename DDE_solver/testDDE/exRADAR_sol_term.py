@@ -24,12 +24,16 @@ def exact_sol(t):
 t_span = [0, 2]
 discs = [(-1, 9/2, -1/2)]
 
-Tol = 1e-8
-solver = solve_dde(f, alpha, phi, t_span, discs=discs, Atol = Tol, Rtol = Tol)
+Tol = 1e-3
+solution = solve_dde(f, alpha, phi, t_span, discs=discs, Atol = Tol, Rtol = Tol)
 
-t_discrete = solver.t
-discrete_sol = np.array([exact_sol(t) for t in t_discrete])
-discrete_aproxx = np.array(solver.y)
+print('steps', solution.steps)
+print('fails', solution.fails)
+print('feval', solution.feval)
+
+# t_discrete = solver.t
+# discrete_sol = np.array([exact_sol(t) for t in t_discrete])
+# discrete_aproxx = np.array(solver.y)
 # print('discrete_approx', discrete_aproxx)
 # print('discrete_sol', discrete_sol)
 # max_discrete_error = np.max(np.abs(discrete_sol - discrete_aproxx))
@@ -37,11 +41,11 @@ discrete_aproxx = np.array(solver.y)
 
 
 
-print('Counting steps', Counting.steps)
-print('Counting fails', Counting.fails)
-print('Counting fcn_calls', Counting.fnc_calls)
-
-plt.plot(solver.t, solver.y, color="blue", label='aproxx')
-plt.plot(solver.t, discrete_sol, color="red", label="real sol") 
-plt.legend()
-plt.show()
+# print('Counting steps', Counting.steps)
+# print('Counting fails', Counting.fails)
+# print('Counting fcn_calls', Counting.fnc_calls)
+#
+# plt.plot(solver.t, solver.y, color="blue", label='aproxx')
+# plt.plot(solver.t, discrete_sol, color="red", label="real sol") 
+# plt.legend()
+# plt.show()

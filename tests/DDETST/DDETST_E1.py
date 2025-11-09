@@ -2,24 +2,20 @@ import numpy as np
 
 from DDE_solver.rkh_refactor import *
 
-
-def f(t, y, x):
-    y1, y2 = y
-    x1, _ = x  # x = [y1(t - y2(t)), y2(t - y2(t))], but only x1 is used
-    dy1 = -2 * x1
-    dy2 = (abs(x1) - abs(y1)) / (1 + abs(x1))
-    return [dy1, dy2]
-
+r, c = np.pi/np.sqrt(3) + 1/20, np.sqrt(3)/(2*np.pi) - 1/25
+def f(t, y, x, z):
+    return r*y*(1 - x - c*z)
 
 def phi(t):
-    return [1.0, 0.5]
+    return 2 + t
 
+def phi_t(t):
+    return 1
 
 def alpha(t, y):
-    y1, y2 = y
-    return t - y2
+    return t - 1
 
-
+beta = alpha
 
 t_span = [0, 40]
 
@@ -32,7 +28,7 @@ for Tol in tolerances:
     print('===========================================================')
     print(f'Tol = {Tol} \n')
     for method in methods:
-        solution = solve_dde(f, alpha, phi, t_span, method = method, Atol=Tol, Rtol=Tol)
+        solution = solve_ndde(t_span, f, alpha, beta, phi, phi_t, method = method, Atol=Tol, Rtol=Tol)
 
         
         print(f'method = {method}')

@@ -3,33 +3,36 @@ import numpy as np
 from DDE_solver.rkh_refactor import *
 
 
-def f(t, y, x):
-    fx = 1.0 if x < 0 else -1.0
-    return fx - y
-
+def alpha(t, y):
+    return np.log(y)
 
 def phi(t):
     return 1.0
 
-
-def alpha(t, y):
-    return t / 2.0
-
+def f(t, y, x):
+    return (y * x) / t
 
 def real_sol(t):
-    if 0 <= t <= 2*np.log(2):
-        return 2*np.exp(-t) - 1
-    elif 2*np.log(2) < t <= 2*np.log(6):
-        return 1 - 6*np.exp(-t)
-    elif 2*np.log(6) < t <= 2*np.log(66):
-        return 66*np.exp(-t) - 1
+    t = np.asarray(t)
+    y = np.zeros_like(t)
+    mask1 = (t >= 1) & (t <= np.e)
+    mask2 = (t > np.e) & (t <= np.e**2)
+    y[mask1] = t[mask1]
+    y[mask2] = np.exp(t[mask2] / np.e)
+    return y
+
+t_span = [1.0, np.e**2]
 
 
-t_span = [0, 2*np.log(66)]
-
+print(f'{'='*80}')
+print(f''' {'='*80} 
+      This is problem 1.1.10 from Paul
+      ''')
 
 methods = ['RKC3', 'RKC4', 'RKC5']
 tolerances = [1e-3, 1e-4, 1e-5, 1e-6, 1e-8, 1e-10]
+# methods = ['RKC5']
+tolerances = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8, 1e-10, 1e-12]
 
 
 for Tol in tolerances:
@@ -52,5 +55,5 @@ for Tol in tolerances:
         print('steps: ', solution.steps)
         print('fails: ', solution.fails)
         print('feval: ', solution.feval)
-        print('discs: ', solution.discs)
+        print('discs', solution.discs)
         print('')

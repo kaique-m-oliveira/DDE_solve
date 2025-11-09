@@ -3,28 +3,40 @@ import numpy as np
 from DDE_solver.rkh_refactor import *
 
 
-def f(t, y, x, z):
-    return 2*np.cos(2*t)*(x**(2*np.cos(t))) + np.log(z) - np.log(2*np.cos(t)) - np.sin(t)
+# Heaviside function
+def H(t):
+    return np.where(t < 0, 0.0, 1.0)
 
+# Delays
+def alpha(t, y):
+    return 0.5 * t  # for the state delay y(½t)
 
+def beta(t, y):
+    return t - np.pi  # for the derivative delay y'(t - π)
+
+# History functions
 def phi(t):
-    return 1
-
+    return 0.0  # y(t) = 0 for t ≤ 0
 
 def phi_t(t):
-    return 2
+    return 0.0  # derivative also 0
 
+# Right-hand side of the DDE
+def f(t, y, x, z):
+    """
+    y'(t) = 1 - 2*x**2
+            - (1 + cos(t)) * H(t - pi) * (1 - 2*x**2)
+            - (1 + cos(t)) * z
+    where x = y(alpha(t, y)) and z = y'(beta(t, y))
+    """
+    return 1 - 2 * x**2 - (1 + np.cos(t)) * H(t - np.pi) * (1 - 2 * x**2) - (1 + np.cos(t)) * z
 
-def alpha(t, y):
-    return t/2
-
-beta = alpha
-
-
+# Analytical solution
 def real_sol(t):
-    return np.exp(np.sin(2*t))
+    return np.sin(t)
 
-t_span = [0, 1]
+# Integration interval
+t_span = [0.0, 4 * np.pi]
 
 print(f'{'='*80}')
 print(f''' {'='*80} 
@@ -33,8 +45,7 @@ print(f''' {'='*80}
 
 methods = ['RKC3', 'RKC4', 'RKC5']
 tolerances = [1e-2,  1e-4, 1e-6, 1e-8, 1e-10]
-# methods = ['RKC4', 'RKC5']
-tolerances = [1e-2,  1e-4, 1e-6, 1e-8, 1e-10, 1e-12]
+
 
 for Tol in tolerances:
     print('===========================================================')
@@ -58,4 +69,3 @@ for Tol in tolerances:
         print('feval: ', solution.feval)
         print('discs: ', solution.discs)
         print('')
-

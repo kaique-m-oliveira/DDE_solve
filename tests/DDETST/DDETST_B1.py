@@ -4,33 +4,30 @@ from DDE_solver.rkh_refactor import *
 
 
 def f(t, y, x):
-    y1, y2 = y
-    x1, x2 = x
-    dy1 = y2
-    dy2 = -x2*(y2**2)*np.exp(1 - y2)
-    return [dy1, dy2]
+    return 1 - x
 
 def phi(t):
-    return [np.log(t), 1/t]
+    return np.log(t)
 
 def alpha(t, y):
-    y1, y2 = y
-    return np.exp(1 - y2)
+    return np.exp(1 - 1/t)
 
 def real_sol(t):
-    return [np.log(t), 1/t]
+    return np.log(t)
 
+t_span = [0.1, 10]
 
-t_span = [0.1, 5]
+print('alpha0', alpha(0.5, phi(0.5)))
 
 
 print(f'{'='*80}')
 print(f''' {'='*80} 
-      This is problem 1.1.10 from Paul
+      This is problem 1.2.6 from Paul
       ''')
-
-methods = ['RKC3', 'RKC4', 'RKC5']
-tolerances = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10, 1e-12]
+methods = ['RKC3', 'RKC4','RKC5']
+tolerances = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8, 1e-10, 1e-12]
+# methods = ['RKC4', 'RKC5']
+# tolerances = [1e-4, 1e-6, 1e-8, 1e-10, 1e-12]
 
 
 for Tol in tolerances:
@@ -54,3 +51,18 @@ for Tol in tolerances:
         print('fails: ', solution.fails)
         print('feval: ', solution.feval)
         print('')
+        # input('finished')
+        # t_plot = np.linspace(t_span[0], t_span[-1], 1000)
+        # approx_plot =  [solution.eta(i) for i in t_plot]
+        # realsol = [real_sol(t) for t in t_plot]
+        # plt.plot(t_plot, approx_plot, color="blue", label='aproxx')
+        # plt.plot(t_plot, realsol, color="red", label='real')
+        # plt.legend()
+        # plt.show()
+        
+
+# t_plot = np.linspace(t_span[0], t_span[-1], 1000)
+# approx_plot =  [solution.eta(i) for i in t_plot]
+# plt.plot(t_plot, approx_plot, color="blue", label='aproxx')
+# plt.legend()
+# plt.show()
