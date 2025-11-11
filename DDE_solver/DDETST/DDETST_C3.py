@@ -61,7 +61,9 @@ print(f''' {'='*80}
       This is problem 1.2.6 from Paul
       ''')
 methods = ['RKC3', 'RKC4', 'RKC5']
-tolerances = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10]
+tolerances = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10, 1e-12]
+# methods = ['RKC4', 'RKC5']
+# tolerances = [1e-12]
 
 
 for Tol in tolerances:

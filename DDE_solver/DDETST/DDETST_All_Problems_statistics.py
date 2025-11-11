@@ -538,14 +538,16 @@ problems = [A1, A2, B1, B2, C1, C2, C3, C4, D1, D2, E1, E2, F1, F2, F3, F4, F5, 
 
 methods = ['RKC3', 'RKC4', 'RKC5']
 tolerances = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10, 1e-12]
+# methods = ['RKC4', 'RKC5']
+# tolerances = [1e-12]
 
 
 for Tol in tolerances:
     print('======================== Overall Statistcs for all DDETST ===========================')
     print(f'Tol = {Tol} \n')
     for method in methods:
-        if Tol < 1e-6 and method == 'RKC3':
-            continue
+        # if Tol < 1e-6 and method == 'RKC3':
+        #     continue
         total_steps = 0
         total_fails = 0
         total_feval = 0
@@ -556,6 +558,17 @@ for Tol in tolerances:
             total_steps += solution.steps
             total_fails += solution.fails
             total_feval += solution.feval
+            # print('total steps: ', total_steps)
+            # print('total fails: ', total_fails)
+            # print('total feval: ', total_feval)
+            # print('iter', iter)
+            # print('problem', problem)
+            # input('')
+            if solution.status == 'failed':
+                print('iter', iter)
+                print('problem',problem)
+                input('failed')
+            iter += 1
         print('total steps: ', total_steps)
         print('total fails: ', total_fails)
         print('total feval: ', total_feval)

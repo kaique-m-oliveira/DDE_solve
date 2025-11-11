@@ -1,8 +1,14 @@
 import numbers
+import random
+import time
 from bisect import bisect_left
 from copy import deepcopy
+from dataclasses import dataclass, field
 
+import matplotlib.pyplot as plt
 import numpy as np
+from scipy.integrate import solve_ivp
+from scipy.optimize import minimize, minimize_scalar, root
 
 
 def linear_interpolant(tn, h, c2, yn, y2):
@@ -106,7 +112,7 @@ def get_initial_step(problem, solution, Atol, Rtol, order, neutral = False):
     else:
         h1 = (0.01 / max(d1, d2)) ** (1 / (order + 1))
 
-    return min(100 * h0, h1, max_step)
+    return min(100 * h0, h1, max_step, 0.3)
 
 
 
@@ -239,7 +245,7 @@ class RungeKutta:
             results = np.empty((len(t), self.problem.ndim), dtype=float)
             for i in range(len(t)):
                 if t[i] <= self.t[0]:
-                    results[i] = self.solution.eta(t[i])
+                    results[i] = self.eta(t[i])
                 else:
                     if self.new_eta[1] is not None:
                         results[i] = self.new_eta[1](t[i])
@@ -248,8 +254,7 @@ class RungeKutta:
                     elif not self.first_eta:
                         results[i] = self._hat_eta_0(t[i])
                     else:
-                        # results[i] = self.eta(t[i], ov=True)
-                        results[i] = self.solution.eta(t[i], ov=True)
+                        results[i] = self.eta(t[i], ov=True)
             return np.squeeze(results)
         return eval
 
@@ -260,7 +265,7 @@ class RungeKutta:
             results = np.empty((len(t), self.problem.ndim), dtype=float)
             for i in range(len(t)):
                 if t[i] <= self.t[0]:
-                    results[i] = self.solution.eta_t(t[i])
+                    results[i] = self.eta_t(t[i])
                 else:
                     if self.new_eta[1] is not None:
                         results[i] = self.new_eta_t[1](t[i])
@@ -269,7 +274,7 @@ class RungeKutta:
                     elif not self.first_eta:
                         results[i] = self._hat_eta_0_t(t[i])
                     else:
-                        results[i] = self.solution.eta_t(t[i], ov=True)
+                        results[i] = self.eta_t(t[i], ov=True)
             return np.squeeze(results)
         return eval
 
@@ -369,7 +374,7 @@ class RungeKutta:
         total_stages = self.A.shape[0]
         self.K = np.zeros((total_stages, self.n), dtype=float)
         tn, h, yn = self.t[0], self.h, self.y[0]
-        eta = self.solution.eta
+        eta = self.eta
         f, alpha = self.problem.f, self.problem.alpha
         n_stages = self.n_stages["discrete_method"]
         c = self.c[:n_stages]
@@ -401,7 +406,7 @@ class RungeKutta:
                 beta_i = self.problem.beta(ti, yi)
 
                 if np.all(beta_i <= np.full(self.ndelays, tn)):
-                    Z_tilde = self.solution.eta_t(beta_i)
+                    Z_tilde = self.eta_t(beta_i)
 
                 elif eta_t_ov is not None:
                     Z_tilde = eta_t_ov(beta_i)
@@ -434,7 +439,10 @@ class RungeKutta:
         self.K_prev = self.K[0:self.n_stages["discrete_method"]].copy()
         if self.first_step:
             self.first_eta = True
-            self.special_interpolant()
+            successfull_interpolant = self.special_interpolant()
+            if not successfull_interpolant:
+                return False
+
             self.first_eta = False
 
         self.one_step_RK4(eta_ov=self.eeta, eta_t_ov=self.eeta_t)
@@ -462,7 +470,7 @@ class RungeKutta:
 
         total_stages = self.A.shape[0]
         tn, h, yn = self.t[0], self.h, self.y[0]
-        eta = self.solution.eta
+        eta = self.eta
         f, alpha = self.problem.f, self.problem.alpha
         n_stages = self.n_stages["discrete_method"]
         c = self.c[:n_stages]
@@ -573,7 +581,13 @@ class RungeKutta:
                 self.K_prev[i] = f(ti, yi, Y_tilde, Z_tilde)
                 self.solution.feval += 1
 
+            diff = np.linalg.norm(self.K_prev[i] - self.K_prev[i-1], ord=np.inf)
+            if diff > 1e6:
+                return False
+
             self.stages_calculated = i + 1
+
+        return True
 
 
 
@@ -744,8 +758,6 @@ class RungeKutta:
         if not success:
             self.h = self.h/2
             self.h_next = self.h
-            self.solution.steps += 1
-            self.solution.fails += 1
             return False
 
         self.build_eta_1()
@@ -759,8 +771,6 @@ class RungeKutta:
         if np.isnan(self.K).any() or np.isinf(self.K).any():
             self.h = self.h/2
             self.h_next = self.h
-            self.solution.steps += 1
-            self.solution.fails += 1
             return False
 
         discrete_disc_satisfied = self.discrete_disc_satistied()
@@ -778,19 +788,17 @@ class RungeKutta:
                  self.order["continuous_err_est_method"])
 
         self.t[1] = self.t[0] + self.h
+
         self.h_next = self.h * \
             min(facmax, max(facmin, fac*min((1/err1) **
-                (1/pp + 1), (1/err2)**(1/qq + 1))))
+                (1/(pp + 1)), (1/err2)**(1/(qq + 1)))))
 
         self.h_next = min(self.h_next, 0.3)
 
         if not discrete_disc_satisfied or not uniform_disc_satistied:
             self.h = self.h_next
-            self.solution.steps += 1 
-            self.solution.fails += 1
             return False
 
-        self.solution.steps += 1 
         return True
 
     def investigate_disc(self):
@@ -915,14 +923,15 @@ class RungeKutta:
             self.limit_directions = np.array(limit_directions)[pos]
             return "branches"
 
-    def one_step_CRK(self, max_iter=15):
+    def one_step_CRK(self, max_iter=20):
         iter = 0
         while self.h >= 10**-12 and iter <= max_iter:
-
             success = self.try_step_CRK()
+            self.solution.steps += 1 
             if success:
                 return True, self
             self.reset_step()
+            self.solution.fails += 1
 
             disc_found = self.is_there_disc()
             if disc_found:
@@ -931,10 +940,11 @@ class RungeKutta:
                 if h >= 1e-14:
                     self.h = h
                     success = self.try_step_CRK()
-
+                    self.solution.steps += 1 
                     if success:
                         self.investigate_disc()
                         return True, self
+                    self.solution.fails += 1
                     self.reset_step()
             iter += 1
 
