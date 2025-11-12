@@ -1,4 +1,7 @@
+""" This is an experimental feature, still needs more development"""
+
 import numpy as np
+
 from DDE_solver.rkh_refactor import *
 
 
@@ -25,7 +28,7 @@ def real_sol_2(t):
 t_span = [0, 2]
 discs = [(-1, 1, 0)]
 
-solutionList = solve_dde(f, alpha, phi, t_span, discs=discs)
+solutionList = solve_dde(t_span, f, alpha, phi, discs=discs)
 
 
 print(f'{'='*80}')

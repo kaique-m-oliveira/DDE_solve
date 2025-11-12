@@ -1,3 +1,5 @@
+""" This is an experimental feature, still needs more development"""
+
 import numpy as np
 
 from DDE_solver.rkh_refactor import *
@@ -32,7 +34,7 @@ for Tol in tolerances:
     print('===========================================================')
     print(f'Tol = {Tol} \n')
     for method in methods:
-        solution = solve_dde(f, alpha, phi, t_span, discs=discs, method = method, Atol=Tol, Rtol=Tol)
+        solution = solve_dde(t_span, f, alpha, phi, discs=discs, method = method, Atol=Tol, Rtol=Tol)
 
         
         print(f'method = {method}')

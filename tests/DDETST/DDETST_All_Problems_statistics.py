@@ -537,22 +537,13 @@ def H4(method, Tol):
 problems = [A1, A2, B1, B2, C1, C2, C3, C4, D1, D2, E1, E2, F1, F2, F3, F4, F5, G1, G2, H1, H2, H3, H4]
 
 methods = ['RKC3', 'RKC4', 'RKC5']
-tolerances = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10, 1e-12, 1e-14]
-# tolerances = [1e-14]
-# methods = ['RKC5']
-# methods = ['RKC4', 'RKC5']
-# tolerances = [1e-12]
+tolerances = [1e-2, 1e-4, 1e-6, 1e-8, 1e-10, 1e-12]
 
-# easy_bench_mark = []
-# for problem in problems:
-#     easy_bench_mark.append(problem('RKC5', 1e-12))
 
 for Tol in tolerances:
     print('======================== Overall Statistcs for all DDETST ===========================')
     print(f'Tol = {Tol} \n')
     for method in methods:
-        # if Tol < 1e-6 and method == 'RKC3':
-        #     continue
         total_steps = 0
         total_fails = 0
         total_feval = 0
@@ -562,23 +553,6 @@ for Tol in tolerances:
             total_steps += solution.steps
             total_fails += solution.fails
             total_feval += solution.feval
-            # tf = solution.t[-1]
-            # bench_sol = easy_bench_mark[i].eta(tf)
-            # aproxx = solution.eta(tf)
-            # diff_end_step = np.linalg.norm(aproxx - bench_sol )
-            # if diff_end_step > 0.1 :
-            #     print('problem', problem)
-            #     print(f' tf = {tf}:')
-            #     print(f'diff is at tf = {diff_end_step}')
-            #     print('benchsol', bench_sol)
-            #     print('aproxx', aproxx)
-            #     print('')
-            # print('total steps: ', total_steps)
-            # print('total fails: ', total_fails)
-            # print('total feval: ', total_feval)
-            # print('iter', iter)
-            # print('problem', problem)
-            # input('')
             if solution.status == 'failed':
                 print('iter', iter)
                 print('problem',problem)
